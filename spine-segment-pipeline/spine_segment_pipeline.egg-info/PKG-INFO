@@ -37,12 +37,30 @@ _sample_data.py : load sample
 
 ![1666879731179|300x400](image/README/1666879731179.png "spine-segment-pipeline-label widget")
 
-# func 
+# function 
 1. set spine point and grow spine area with geodesic algorithm and radiation kernel . Binary neuro morph resist its grow border.
 2. give four method to detect spine
 3. geodesic and chan vese method to get spine contour
 4. only serve as assist ,some errors need correct by hand
-5. 
+
+# usage
+
+I not sure that this plugin is suitable for all data( I just try two persons's data(one use camkii label and one use f-actin label,but all data is 0.16um/pixel). data that labeld by spine marker will be better.
+
+First,you load 2D/3D one frame img, then choose any threshold method(It's up to effect). choose best binary result in `binary Image` combobox.
+
+Second,choose spot method,.If your data space is not 0.160.16um/pixel, you could only choose tensor or hessian matrix. If you have SVM/CNN model , load model file or folder in FileEdit. Then click `find spot`, you will see candidate spots splited into red/blue.
+
+If there are any error spots, choose them and click `to spine` or `to den` to recorrect them. 
+
+Third, choose `geodesic` method, and enter searchbox size( 3D : z,x,y  2D: x,y), then run grow. Of course. You could add missing spots at spine point layer after grow operator.  Then click `reseg`, result will be recaculate based on former result and new points.
+
+If some spines have complex shape, and plugin could not identify or segment them correctly.You could modify them manually. click `add label`, plugin reallocate labels for labeled spine, and give new label id for anotation. 
+
+`save` button will save dendrite and spine points data, you could run script in spine-ipynb to train your data.
+
+
+
 # TODO
 
 1. Bug: CNN model only support jupyter launch mode not command line 

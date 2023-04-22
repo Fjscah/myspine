@@ -16,12 +16,15 @@ spine_segment_pipeline/cflow/__init__.py
 spine_segment_pipeline/cflow/blob.py
 spine_segment_pipeline/cflow/localthreadhold.py
 spine_segment_pipeline/cflow/meanshift_23D.py
-spine_segment_pipeline/cflow/skeleton_leaf.py
-spine_segment_pipeline/cflow/sobel_23D.py
 spine_segment_pipeline/imgio/__init__.py
 spine_segment_pipeline/imgio/imgio_base.py
 spine_segment_pipeline/imgio/napari_base.py
 spine_segment_pipeline/imgio/random_color.py
+spine_segment_pipeline/networks/__init__.py
+spine_segment_pipeline/networks/cnn.py
+spine_segment_pipeline/networks/maskrcnn.py
+spine_segment_pipeline/networks/unet.py
+spine_segment_pipeline/networks/yolact.py
 spine_segment_pipeline/seg/__init__.py
 spine_segment_pipeline/seg/segment.py
 spine_segment_pipeline/strutensor/__init__.py
@@ -32,3 +35,4 @@ spine_segment_pipeline/utils/file_base.py
 spine_segment_pipeline/utils/measure.py
 spine_segment_pipeline/utils/npixel.py
 spine_segment_pipeline/utils/spine_struct.py
+spine_segment_pipeline/utils/yaml_config.py

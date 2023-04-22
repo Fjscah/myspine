@@ -3,28 +3,20 @@ from itertools import cycle
 
 import napari
 import numpy as np
+import scipy
 from scipy import ndimage as ndi
 from skimage import filters, morphology
 from skimage._shared.utils import check_nD, deprecate_kwarg
-from skimage.morphology import dilation
+from skimage.morphology import (binary_dilation, convex_hull_image, dilation,
+                                erosion, remove_small_objects)
+from skimage.segmentation import expand_labels, watershed
 from skimage.segmentation.morphsnakes import _curvop
 
-from ..cflow.meanshift_23D import NormShift, generateShift
-
-from itertools import cycle
-import napari
-from skimage.morphology import convex_hull_image,erosion,binary_dilation
-import numpy as np
-from skimage._shared.utils import check_nD, deprecate_kwarg
-from skimage.morphology import dilation
-from ..cflow.meanshift_23D import generateShift,NormShift,sobel_numpy
-from skimage.segmentation.morphsnakes import _curvop
-from skimage import filters,morphology
-import numpy as np
-import scipy
-from ..utils.npixel import array_slice
-from skimage.segmentation import expand_labels
+from ..cflow.meanshift_23D import NormShift, generateShift, sobel_numpy
 from ..utils import measure
+from ..utils.npixel import array_slice,valid_connect_pixel,valid_array_slice
+
+
 def div(u):
     Ii=np.gradient(u)
     Norm=np.sqrt(np.sum([I*I for I in Ii]))+1e-8
@@ -130,7 +122,9 @@ def foreach_grow(image,num_iter,init_level_set,searchbox,
             mask2=morph_geodesic_contour(region, num_iter,mask, smoothing=smoothing,balloon=1,rigid=rigidmask,usesobel=usesobel)
         else:
             mask2=morph_chan_vese(region,num_iter,mask,smoothing=0,lambda1=lambda1, lambda2=lambda2,rigid=rigidmask)
+        mask2[region==0]=0
         obj = [slice(np.max(int(st),0), int(st+s),1) for st,s in zip(indx,searchbox)]
+        obj=tuple(obj)
         # v=napari.Viewer()
         # v.add_image(region)
         # v.add_image(mask)
@@ -178,7 +172,120 @@ def foreach_grow(image,num_iter,init_level_set,searchbox,
     return padmask[tuple(obj)] 
 
 
+def foreach_grow_points(image,num_iter,points_set,searchbox,
+                     sizeth=np.inf,adth=None,method="geo",
+                     smoothing=0,lambda1=1, lambda2=3,
+                     oldseg=None,convex=False,
+                     usesobel=False,userigid=False):
+    """grow area by seed
+    Args:
+        image (ndarray): z,y,z, 2D/3D
+        num_iter (int): max iterration , max spine radius
+        pointsl_set (label array): points seed
+        searchbox (shape): crop area for searching quickly
+        sizeth (int, optional): man spine pixel count. Defaults to np.inf.
+        adth (mask, optional): neuron mask. Defaults to None.
+        method (str, optional): geo or chan. Defaults to "geo".
+        smoothing (int, optional): smooth fractor not used. Defaults to 0.
+        lambda1 (float, optional): inner factor , lambda1/lambda2 to define border, smaller -> aera larger. Defaults to 1.
+        lambda2 (float, optional): outter factor. Defaults to 3.
+    Returns:
+        ndarray: size same to labels, label grow result
+    """
+  
+    # oldseg,startlab=resortseg(oldseg,2) #startlab :next lab
+    startlab=np.max(oldseg)+1
+    startlab=max(startlab,2)
+    #padadth=np.pad(adth,[(s//2,s//2) for s in searchbox])
+    shifts=generateShift(searchbox)
+    shifts=NormShift(shifts)
+    sobels=sobel_numpy(image)
+    stn=image.ndim-2
+    ndim=image.ndim
+    if ndim==3:
+        structure=np.ones((1,3,3))
+    else:
+        structure=np.ones((3,3))
+    # print(init_level_set.shape)
+    # init_level_set=init_level_set.astype(np.int64)
+    if usesobel:
+        image = np.sqrt(sum([grad**2 for grad  in sobels]) / image.ndim)
+    sobels=NormShift(sobels)
+    if adth is not None:
+        image=image*adth
+    shape=image.shape
+    for point in points_set:
+        # seach 3*ndim peak point
+        point=[int(p) for p in point]
+        if oldseg[tuple(point)]: # has been labeled 
+            continue
+        value=image[tuple(point)] # new label
+        npoints=valid_connect_pixel(point,shape)
+        for npoint in npoints:
+            if (npoint is not None) and image[tuple(npoint)]>value:
+                value=image[tuple(npoint)]
+                point=npoint
+        indx=tuple(point)
+        oldseg[indx]=startlab # asign new label
+        
+        # crop image
+        lab=startlab
+        # left up is crop image pos at oriimage, offset is offet boundary,may negtive 
+        region,obj,offset=valid_array_slice(image,indx,searchbox,center=True,pad=None)
+        mask0,obj,offset=valid_array_slice(oldseg,indx,searchbox,center=True,pad=None)
+        # mask0=array_slice(oldseg,indx,searchbox,center=False,pad=None)
+        # region=array_slice(image,indx,searchbox,center=False,pad=None)
+        #adth0=array_slice(padadth,tuple(indx),searchbox,center=False,pad=None)
+        mask=mask0==lab
+        sobelregion=[valid_array_slice(s,indx,searchbox,center=True,pad=None)[0] for s in sobels]
+        if userigid:
+            innerdot=sum([shift*sregion for shift,sregion in zip(shifts[stn:],sobelregion[stn:])])
+            rigidmask=innerdot<=-0.1
+        else:
+            rigidmask=None
+        if method=="geo":
+            mask2=morph_geodesic_contour(region, num_iter,mask, smoothing=smoothing,balloon=1,rigid=rigidmask,usesobel=usesobel)
+        else:
+            mask2=morph_chan_vese(region,num_iter,mask,smoothing=0,lambda1=lambda1, lambda2=lambda2,rigid=rigidmask)
+        mask2[region==0]=0
 
+        mask2=ndi.binary_fill_holes(mask2,structure=structure).astype(int)
+        if convex:
+            mask2=fill_hulls(mask2)
+        # if (ndim==3):
+        #     for m in mask2:
+        #mask2 = convex_hull_image(mask2)
+        #remove too large object
+        objectcount=np.sum(mask2)
+        #print(indx,lab,objectcount)
+        
+        #mask2 : current label grow area
+        #mask0 : all label grow area exclude current label, but include current label seed point
+        #mask : current seed label
+        
+        if(objectcount>sizeth or objectcount<4):
+            mask2=np.zeros_like(mask2)
+            mask0[mask]=0 # remove label
+            
+        #merge overlap object
+        ovelapmask=mask2*mask0*(~mask)
+        overlapcount=np.sum(ovelapmask)
+        if (overlapcount): # has overlap
+            ar_unique, c = np.unique(ovelapmask, return_counts=True)
+            arr1inds = c.argsort()
+            sorted_c = c[arr1inds[::-1]]
+            sorted_lab = ar_unique[arr1inds[::-1]]
+            for clab,c in zip(sorted_c,sorted_lab):
+                if clab==0:continue
+                if clab==lab:continue
+                if overlapcount>0.5*c or c>10 or overlapcount>0.5*objectcount :
+                    mask2[mask0==clab]=1        
+        mask2=mask2*lab
+        mask2[mask2==0]=mask0[mask2==0]
+        oldseg[obj]=mask2
+        startlab+=1
+    # obj=[slice(s//2,-s//2+1) for s in searchbox]
+    return oldseg
 
 def remove_large_objects(ar, max_size=64, connectivity=1,):
     out = ar.copy()
@@ -541,15 +648,21 @@ def fill_hulls(image):
 def resortseg(seg,start=1):
     labellist=list(np.unique(seg))
     labellist.sort()
+    #print(labellist)
     arr=seg
     if 0 in labellist:
         labellist.remove(0)
+    if len(labellist)>0 and labellist[0]<start:
+        off=start-labellist[0]
+    else:
+        off=0
+    seg[seg>0]+=off
     newl=start-1
     for newl,oldl in enumerate(labellist,start):
+        oldl+=off
         if(newl!=oldl):
+            #print(oldl,newl)
             arr[arr==oldl]=newl
-    # nstart=len(labellist)
-    
     return arr,newl+1
 def resortseg_truncate(seg,start=1):
     arr=(seg>=start)*seg
@@ -565,21 +678,88 @@ def resortseg_truncate(seg,start=1):
     return arr,newl+1
 #==↑==↑==↑==↑==↑==↑== resortlable from 1 ==↑==↑==↑==↑==↑==↑#
 
+
 def shrink_label(lables):
-    labs=list(np.unique(lables))
-    if 0 in labs:
-        labs.remove(0)
+    labs=list(measure.unique_labs(lables))
     nlabls=np.zeros_like(lables)
     for lab in labs:
         mask=lables==lab
         mask=erosion(mask)
         nlabls+=mask*lab
     return nlabls
-        
+
+def ndilable(image,offset=1):
+    labels,num=ndi.label(image)
+    labels[labels>0]+=offset
+    return labels,num
+    
+def remove_small_lable(mask,thsize):
+    labs=measure.unique_labs(mask)
+    newmask=np.zeros_like(mask)
+    for lab in labs:
+        mm=mask==lab
+        mask2=remove_small_objects(mm,thsize)
+        if not mask.any():
+            mask2=mm
+        newmask[mask2]=lab
+   
+    return newmask        
+
+
+def modify_mask(mask,projmask,sizeth=20):
+    denmask=mask==1
+    spinemask=mask==2
+    denmask=remove_small_objects(denmask,min_size=sizeth)
+    projmask=remove_small_objects(projmask==1,min_size=sizeth)
+    # print(mask.shape[0])
+    projmask=np.tile(projmask,(mask.shape[0],1,1))
+    spinemask[projmask>0]=0
+    mask=spinemask*2+denmask
+    return mask
+
+def label_instance_water(img,corner,spinemask,maxspinesize,searchbox=[7,7,7]):
+    labels,num=ndilable(corner,2)
+    ls = foreach_grow(img, num_iter=4, 
+                                init_level_set=labels,
+                                searchbox=searchbox,
+                                sizeth=maxspinesize,adth=spinemask,
+                                method="geo",smoothing=0)
+    spine_label=watershed(-img,ls,mask=spinemask)
+    return spine_label
+
+def keep_spineimg_bypr(imgs,mask,spinepr=None,th=0.5,cval=None):
+    # if not spine pr , th no use ,keep spine img according to mask
+    if not cval:
+        cval=np.mean(imgs[mask==0])
+    imgns=imgs.copy()
+    if spinepr is not None:
+        imgns[spinepr<th]=cval
+    else:
+        imgns[mask!=2]=cval
+    return imgns
+
+def adth_func_time(imgs,binary_func):
+    if binary_func.__name__=='local_threshold':
+        adths=[binary_func(img) for img in imgs]
+        ads=np.array(adths)
+        meanbg = np.mean(imgs[ads<1])
+        th=np.max(imgs[ads<1])
+    else:    
+        mim=np.mean(imgs[0:5],axis=0)
+        th=binary_func(mim)
+        meanbg = np.mean(mim[mim<th])
+            
+        adths=[img>th for img in imgs]
+    return np.array(adths),th,meanbg
+
+
         
 #-----------------------#
 #   TEST  #
 #-----------------------#
+
+
+
 def test():
     arr=np.array(
         [[0,0,0,0,0,0,0,0,0],

@@ -1,9 +1,6 @@
-from ..cflow.blob import peakfilter
-from ..cflow.localthreadhold import local_threshold
 import numpy as np
 from .segment import foreach_grow,foreach_grow_area
-from skimage.segmentation import expand_labels
-import btrack
+# import btrack
 from ..imgio import napari_base
 from ..utils import npixel
 def nms(image,hitpeak,returnmask=True):
@@ -238,6 +235,8 @@ def relabel(imgs,tracks,lenth=2):
                 ts=tr.t
                 for x,y,t in zip (xs,ys,ts):
                     x,y,t=int(x),int(y),int(t)
+                    if x>=size[0]:x=size[0]-1
+                    if y>=size[1]:y=size[1]-1
                     img=imgs[t]
                     oldlab=img[y,x]
                     if oldlab!=0:

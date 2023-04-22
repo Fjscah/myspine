@@ -1,6 +1,5 @@
 from matplotlib import lines
 from pytest import Instance
-from sqlalchemy import false, true
 import multiprocessing.dummy
 from skimage import filters
 

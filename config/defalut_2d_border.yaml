@@ -1,0 +1,66 @@
+
+Path:
+  Train_path: myspine-dataset/2D-morph-seg/ # dataset root folder
+
+  oridata_path: "" #  defalt  Train_path/img    stroe large img eg 512*512
+  orilabel_path: "" # defalt  Train_path/label  stroe label for img eg 512*512
+  
+  data_path: "" #  defalt Train_path/imgcrop    store small img eg 128*125
+  label_path: "" # defalt  Train_path/labelcrop will crop from whole img , eg from 512 to 256,128 , see input size
+
+  log_path: "DATA/log/2Dtorchunet3-b/seg/"  #  defalt  Train_path/log error tensorboard score log dir
+  model_path : "DATA/model/2Dtorchunet3-b/seg" ##  defalt  Train_path/model
+  model_save_path: "DATA/model/2Dtorchune3-b/seg/best.ckpt" # no use
+  
+
+  save_suffix: "-border" # -border todo : -den -spine
+  label_suffix: "-seg"
+
+  filetype: ".tif"
+
+Data:
+  axes: 'yx' # change to zyx ,todo
+  z_factor: 2.0 # z spacing / x spancing ,x spacing=y spacing,todo
+  input_sizez: 1  # Input depth ,z
+  input_sizexy: 256   # 256*256,Input feature width/height,for crop generate img data
+  num_classes: 3 # include zero background
+  inputchannel: 1 # 1: grayscale,todo
+  partion : [0.6,0.2,0.2] # train,valid,test+=1
+  c_val : "auto" # background value
+
+ 
+  data_augmentation: #no use todo
+    translate: false
+    flip: true
+    rotate: true
+    probability: 0.3
+    affine: 0.3
+Training:
+  loss_type: 'FocalLoss' #'b_cross_entropy' 'w_cross_entropy' 'FocalLoss'
+  batch_size: 8
+  cls_weight: [1,1,1]
+  epochs: 100
+  optimizer_name: "Adam" # supports [Adam, Adagrad, RMSProp]
+  learning_rate: 0.001
+  denovo : False
+  learning_rate_type: "None"
+  deep_supervision: false # for unet ++
+  #validate_iterations: 1000 # saves weights every n iterations
+  #convergence_iterations: 1000
+  keep_top: 10
+  seed: 42
+Network:
+  modelname : "unet2d" # unet2d unet++  ...
+  load_model: True
+  base_filter: 16
+  activation_function: "relu" # supports [relu, leaky_relu]
+  droput: True
+  droput_probability: 0.15 # value in range [0 - 1]
+  kernel_init: 'he_normal'  # He, normal
+  kernel_regularizer: 'None' # "None","L2"
+  reg_factor: 0.0
+  mixed_precision: True
+  use_shallow_network: True
+  layer_num: 3 
+  out_layer: "sigmoid" #softmax ,sigmoid
+

@@ -8,10 +8,61 @@ from skimage.filters.thresholding import (threshold_isodata, threshold_li,
                                           threshold_multiotsu,
                                           threshold_niblack, threshold_otsu,
                                           threshold_triangle, threshold_yen)
-from skimage.morphology import (closing, cube, dilation, opening,
+from skimage.morphology import (closing, cube, dilation, opening,erosion,
                                 remove_small_objects, skeletonize_3d)
+from skimage.morphology import remove_small_objects
+def local_threshold_23d(image,filtersize=21):
+    if(filtersize%2==0): filtersize+=1
+    
+    oriimage=image.copy()
+    # Now we want to separate the two objects in image
+    # Generate the markers as local maxima of the distance to the background
+    #11 512 512
+    mean1=np.mean(image)
+    stdv1=np.std(image)
+
+    # noiseimg=image.copy()
+
+    noise_mean=np.nanmean(image[image<mean1+3*stdv1])
+    noise_stdv=np.nanstd(image[image<mean1+3*stdv1])
+
+    #sig_mean=np.nanmean(noiseimg[noiseimg>mean1+stdv1])
+    #sig_stdv=np.nanstd(noiseimg[noiseimg>mean1+stdv1])
+    #print("image mean: ",mean1, " stdv :",stdv1)
+    #print("moise mean: ",noise_mean, " stdv :",noise_stdv)
+
+    #   ======Threshold========
+    # ad_th=image.copy()
+    #border
+    # ad_th_mask=apply_hysteresis_threshold(ad_th, noise_mean+2*noise_stdv,noise_mean+3*noise_stdv)
 
 
+    #ad_th[ad_th<noise_mean+3*noise_stdv]=0
+    #inner smller than mask
+    ad_th_inner=image.copy()
+    # imaget_tophat=morphology.white_tophat(ad_th_inner,morphology.cube(3))
+    # ad_th_inner=ad_th_inner-imaget_tophat
+    # ad_th_inner=ad_th_inner>threshold_local(ad_th_inner,(filtersize,filtersize,1),"gaussian")
+    if image.ndim==3:
+        for i in range(image.shape[0]):
+            print(i)
+            imaget=ad_th_inner[i,:,:]
+            # imaget_tophat=morphology.white_tophat(imaget,morphology.disk(3))
+            # imaget=imaget-imaget_tophat
+            ad_th_inner[i,:,:]=imaget>(threshold_local(imaget,filtersize,'gaussian',-noise_stdv))
+    else:
+        ad_th_inner=ad_th_inner>(threshold_local(ad_th_inner,filtersize,'gaussian',-noise_stdv))
+
+    # ad_th_inner[image<noise_mean+stdv1*1]=0
+    ad_th_inner[image>threshold_isodata(image)]=1
+    ndim=image.ndim
+    
+    # footprint=np.ones((3,)*ndim)
+    # ad_th_inner=erosion(ad_th_inner,footprint)
+    # ad_th_inner=dilation(ad_th_inner,footprint)
+    ad_th_inner=np.array(ad_th_inner,dtype=np.bool_)
+    ad_th_inner=remove_small_objects(ad_th_inner,2)
+    return ad_th_inner
 def local_threshold_3d(image,filtersize=21):
     if(filtersize%2==0): filtersize+=1
     
@@ -85,7 +136,7 @@ def all_threshold_func():
             threshold_minimum,
             threshold_multiotsu,
             threshold_niblack, threshold_otsu,
-            threshold_triangle, threshold_yen,local_threshold]
+            threshold_triangle, threshold_yen,local_threshold,local_threshold_23d]
     dicts={}
     method_name=[]
     for meth in methods:

@@ -83,9 +83,20 @@ def create_imgroi_path(imgp,n,note="_roi",folder=""):
     return newp
 
 def create_dir(ndir):
+    if not ndir:return
     if not os.path.exists(ndir):
         print("create dir : ",ndir)
         os.makedirs(ndir)
+def create_file(filename):
+    
+    if not os.path.exists(filename):
+        direc,_,_=split_filename(filename)
+        create_dir(direc)
+        print("create file : ",filename)
+        file = open(filename, "w")
+
+        # Close the file
+        file.close()
 import shutil
 def remove_dir(ndir):
     if os.path.exists(ndir):
@@ -114,6 +125,17 @@ def file_list(file_dir,suffix="tif"):
         #print(root) #当前目录路径
         #print(dirs) #当前路径下所有子目录
         #print(files) #当前路径下所有非目录子文件
-
+def file_list_bytime(file_path,suffix="tif"):
+    
+    dir_list = file_list(file_path,suffix)
+    if not dir_list:
+        return []
+    else:
+        # 注意，这里使用lambda表达式，将文件按照最后修改时间顺序升序排列
+        # os.path.getmtime() 函数是获取文件最后修改时间
+        # os.path.getctime() 函数是获取文件最后创建时间
+        dir_list = sorted(dir_list,key=lambda x: os.path.getctime(x))
+        # print(dir_list)
+        return dir_list
 if __name__=="__main__":
-    print(get_parent_dir(path_current=r"myspine\utils\file_base.py",level=1))
+    print("\n".join(file_list_bytime(r"D:\data\Train\Train\2D-2023-spine\imgcrop",".tif")))

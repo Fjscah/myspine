@@ -1,6 +1,5 @@
 """ plot: plotting
 copy from liaozhenghan
-etsynseg
 """
 
 import numpy as np

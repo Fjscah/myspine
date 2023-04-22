@@ -533,15 +533,21 @@ def fill_hulls(image):
 def resortseg(seg,start=1):
     labellist=list(np.unique(seg))
     labellist.sort()
+    #print(labellist)
     arr=seg
     if 0 in labellist:
         labellist.remove(0)
+    if len(labellist)>0 and labellist[0]<start:
+        off=start-labellist[0]
+    else:
+        off=0
+    seg[seg>0]+=off
     newl=start-1
     for newl,oldl in enumerate(labellist,start):
+        oldl+=off
         if(newl!=oldl):
+            #print(oldl,newl)
             arr[arr==oldl]=newl
-    # nstart=len(labellist)
-    
     return arr,newl+1
 def resortseg_truncate(seg,start=1):
     arr=(seg>=start)*seg
@@ -584,26 +590,32 @@ def remove_small_lable(mask,thsize):
    
     return newmask        
 
-
-def modify_mask(mask,projmask,sizeth=20):
+def modify_masks(masks,sizeth=4):
+    for n,mask in enumerate(masks):
+        masks[n]=modify_mask(mask,sizeth=sizeth)
+def modify_mask(mask,projmask=None,sizeth=20):
     denmask=mask==1
     spinemask=mask==2
     denmask=remove_small_objects(denmask,min_size=sizeth)
-    projmask=remove_small_objects(projmask==1,min_size=sizeth)
-    # print(mask.shape[0])
-    projmask=np.tile(projmask,(mask.shape[0],1,1))
-    spinemask[projmask>0]=0
+    if projmask is not None:
+        projmask=remove_small_objects(projmask==1,min_size=sizeth)
+        # print(mask.shape[0])
+        projmask=np.tile(projmask,(mask.shape[0],1,1))
+        spinemask[projmask>0]=0
+    else:
+        spinemask=remove_small_objects(spinemask,min_size=sizeth)
     mask=spinemask*2+denmask
     return mask
 
 def label_instance_water(img,corner,spinemask,maxspinesize,searchbox=[7,7,7]):
-    labels,num=ndilable(corner,1)
+    labels,num=ndilable(corner,2)
     ls = foreach_grow(img, num_iter=4, 
                                 init_level_set=labels,
                                 searchbox=searchbox,
                                 sizeth=maxspinesize,adth=spinemask,
                                 method="geo",smoothing=0)
     spine_label=watershed(-img,ls,mask=spinemask)
+    
     return spine_label
 
 def keep_spineimg_bypr(imgs,mask,spinepr=None,th=0.5,cval=None):
@@ -618,10 +630,17 @@ def keep_spineimg_bypr(imgs,mask,spinepr=None,th=0.5,cval=None):
     return imgns
 
 def adth_func_time(imgs,binary_func):
-    mim=np.mean(imgs[0:5],axis=0)
-    th=binary_func(mim)
-    meanbg = np.mean(mim[mim<th])
-    adths=[img>th for img in imgs]
+    if binary_func.__name__=='local_threshold':
+        adths=[binary_func(img) for img in imgs]
+        ads=np.array(adths)
+        meanbg = np.mean(imgs[ads<1])
+        th=np.max(imgs[ads<1])
+    else:    
+        mim=np.mean(imgs[0:5],axis=0)
+        th=binary_func(mim)
+        meanbg = np.mean(mim[mim<th])
+            
+        adths=[img>th for img in imgs]
     return np.array(adths),th,meanbg
 
 

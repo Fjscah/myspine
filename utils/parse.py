@@ -4,9 +4,7 @@ from os import mkdir,makedirs
 from pathlib import Path
 from shutil import copyfile
 import os
-from tensorflow.keras import mixed_precision
-#from trainers.trainer import Trainer
-import tensorflow as tf
+
 import numpy as np
 import random
 import argparse

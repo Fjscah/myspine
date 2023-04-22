@@ -20,7 +20,6 @@ from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 import matplotlib.pyplot as plt
 
 import numpy as np
-import plotly.express as px
 
 from ..cflow import *
 from skimage import  feature,filters
@@ -262,6 +261,53 @@ confocal fluorescence microscopy (more details at [1]_ under
 .. [1] https://gitlab.com/scikit-image/d2/#d2
 
 """
+# def StructureEvi(image,step=2,sigma=None,mode='constant', cval=0,method="hessian"):
+#     """cauculate eigenvalue for image 's structure or hessian matrix ,to get three orthoganal lambda
+
+#     Args:
+#         image (ndarray): z,y,z
+#         step (int, optional): when caculate structure , it need caculate gradient,use spaceing step to caculate,if set hessian , not used. Defaults to 2.
+#         sigma (None,list of ndim, optional): gaussian filter params, None default set 1. Defaults to None.
+#         mode (str, optional): _description_. Defaults to 'constant'.
+#         cval (int, optional): _description_. Defaults to 0.
+#         method (str, optional): hessian/structure. Defaults to "hessian".
+
+#     Returns:
+#         eigen,stick: stick describe the ballness property
+#     """
+
+#     #print(f'number of dimensions: {image.ndim}')
+#     #print(f'shape: {image.shape}')
+#     #print(f'dtype: {image.dtype}')
+#     if sigma is None: 
+#         sigma = tuple([1 for i in range(image.ndim)])
+#     image = feature.corner._prepare_grayscale_input_nD(image)
+#     if method=="hessian":
+#         Ii= HessianEle(image, sigma=sigma)
+#     else:
+#         Ii=StructureTensorEle(image,step=step,sigma=None)
+    
+#     A_elems = [filters.gaussian(der0 * der1, sigma,mode=mode, cval=cval)
+#                for der0, der1 in combinations_with_replacement(Ii, 2)]   
+     
+#     #A_elems = feature.structure_tensor(image, sigma=sigma)
+#     #traceA= A_elems[0]+A_elems[3]+A_elems[5]
+
+
+#     eigen = feature.structure_tensor_eigenvalues(A_elems)
+#     #print(eigen[0].shape,image.shape,type(image))
+#     # if len(eigen==2):
+#     #     stick=eigen[1]*eigen[1]/(eigen[0]-eigen[1]+0.05)
+#     # else:
+#     #     stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
+#     if len(eigen==2):
+#         stick=eigen[1]/(eigen[0]+0.005)
+#     else:
+#         stick=eigen[2]*eigen[2]/(eigen[0]+0.005)/(eigen[1]+0.005)
+#     #stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
+#     #stick2=(eigen[1]-eigen[2])/(eigen[2]+0.001)
+#     return eigen,stick
+
 def StructureEvi(image,step=2,sigma=None,mode='constant', cval=0,method="hessian"):
     """cauculate eigenvalue for image 's structure or hessian matrix ,to get three orthoganal lambda
 
@@ -284,28 +330,53 @@ def StructureEvi(image,step=2,sigma=None,mode='constant', cval=0,method="hessian
         sigma = tuple([1 for i in range(image.ndim)])
     image = feature.corner._prepare_grayscale_input_nD(image)
     if method=="hessian":
+        # image=-image
         Ii= HessianEle(image, sigma=sigma)
+        A_elems=Ii
+        # A_elems = [filters.gaussian(der0 * der1, sigma,mode=mode, cval=cval)
+        #            for der0, der1 in combinations_with_replacement(Ii, 2)]   
+        # mask=np.ones_like(image)
+        
+        # for i in A_elems:
+        #     mask[i>0]=0
+        #eigen = feature.structure_tensor_eigenvalues(A_elems)
+        eigen =hessian_matrix_eigvals(A_elems)
+        for n,i in enumerate(eigen):
+            eigen[n][i>0]=0
+            # eigen[n][i<0]=-i[i<0]
+        eigen=np.sort(eigen,axis=0)
+        eigen=np.abs(eigen)
+           
+        # eigen=feature.hessian_matrix_eigvals(A_elems)
     else:
         Ii=StructureTensorEle(image,step=step,sigma=None)
-    
-    A_elems = [filters.gaussian(der0 * der1, sigma,mode=mode, cval=cval)
-               for der0, der1 in combinations_with_replacement(Ii, 2)]   
-     
+        # Ii=feature.structure_tensor(image, sigma=sigma, order='rc')
+        # A_elems=Ii
+        A_elems = [filters.gaussian(der0 * der1, sigma,mode=mode, cval=cval)
+                   for der0, der1 in combinations_with_replacement(Ii, 2)]   
+        # A_elems = [der0 * der1
+        #         for der0, der1 in combinations_with_replacement(Ii, 2)] 
+        eigen = feature.structure_tensor_eigenvalues(A_elems)
+ 
+        
+        
     #A_elems = feature.structure_tensor(image, sigma=sigma)
     #traceA= A_elems[0]+A_elems[3]+A_elems[5]
 
 
-    eigen = feature.structure_tensor_eigenvalues(A_elems)
+    
+    print(method,"ele",len(A_elems),"eigen",len(eigen))
     #print(eigen[0].shape,image.shape,type(image))
+    # if len(eigen)==2:
+    #     stick=eigen[1]*eigen[1]/(eigen[0]-eigen[1]+0.05)
+    # else:
+    #     stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
     if len(eigen==2):
-        stick=eigen[1]*eigen[1]/(eigen[0]-eigen[1]+0.05)
+        stick=eigen[1]/(eigen[0]+0.000005)
     else:
-        stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
-    #stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
+        stick=eigen[2]*eigen[2]/(eigen[0]+0.000005)/(eigen[1]+0.000005)
     #stick2=(eigen[1]-eigen[2])/(eigen[2]+0.001)
     return eigen,stick
-
-
 
 #-----------------------#
 #   Hession   #

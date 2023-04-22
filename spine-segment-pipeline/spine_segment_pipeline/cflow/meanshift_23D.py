@@ -1,13 +1,12 @@
 from matplotlib import lines
 from pytest import Instance
-from sqlalchemy import false, true
 import multiprocessing.dummy
 from skimage import filters
 
 import numpy as np
 import sys
 import scipy.ndimage as ndi
-from ..utils import *
+
 # >>> xv, yv = np.meshgrid([0,1,2], [0,1], indexing='ij')
 # >>> xv
 # array([[0, 0],

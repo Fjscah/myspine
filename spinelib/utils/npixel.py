@@ -1,4 +1,3 @@
-from mahotas import croptobbox
 import numpy as np
 
 #=======================#
@@ -72,18 +71,29 @@ def valid_border_pixel(point,radius,shape):
             points[n]=None
     return points
 
-
+def valid_surround_pixel(point,radius,shape):     
+    point=list(point)
+    linespace=[np.arange(p-radius,p+radius+1) for p in point]
+    grids = np.meshgrid(*linespace,indexing="ij")
+    grids=[grid.ravel() for grid in grids]
+    points=[ index for index in zip(*grids)]
+    for n,p in enumerate(points):
+        if outOfbound(p,shape):
+            points[n]=None
+    return points
 def array_slice(arr,start,size,center=False,pad=None):
     if center==True and pad==None:
         obj = [slice(np.max(int(st-s//2),0), int(st+s//2),1) for st,s in zip(start,size)]
+        obj=tuple(obj)
         return arr[obj] 
     elif pad==None and center==False:
         obj = [slice(np.max(int(st),0), int(st+s),1) for st,s in zip(start,size)]
+        obj=tuple(obj)
         return arr[obj] 
     cropbox=arr[obj]
-    if (croptobbox.shape-size).any():
-        pass
-        #todo
+    # if (croptobbox.shape-size).any():
+    #     pass
+    #     #todo
     
     return arr[obj] 
 

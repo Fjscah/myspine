@@ -3,8 +3,6 @@ Modified from https://github.com/kwohlfahrt/blob/blob/master/blob.py
 fork from https://github.com/juglab/PlatyMatch/blob/master/platymatch/detect_nuclei/ss_log.py
 """
 from math import pi
-from cv2 import log
-from mahotas import dog
 import numpy as np
 from numpy import asarray, empty, nonzero, transpose
 from scipy.ndimage.filters import gaussian_laplace, minimum_filter
@@ -43,6 +41,11 @@ def peakfilter(img,footprint=None,th=0,exborder=True,use_gaussian=True):
         footprint=np.ones((3,) * img.ndim, dtype=np.int8)
     elif isinstance(footprint,int):
         footprint=np.ones((footprint,) * img.ndim, dtype=np.int8)
+        
+    img=img.copy()
+    if exborder:
+        img[0,...]=0
+        img[-1,...]=0
     image2=dilation(img,footprint)
     mask=img>=image2
     if exborder:

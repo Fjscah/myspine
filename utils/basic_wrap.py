@@ -11,12 +11,17 @@
 '''
 # here put the import lib
 # descrbe.py
+import skimage.filters.edges
 import functools
 import logging
 import time
-from .yaml_config import default_configuration,YAMLConfig
-
-
+import sys
+import os
+sys.path.append(os.path.abspath("./utils"))
+from . import file_base
+from .yaml_config import YAMLConfig
+from logging import handlers
+import os
 
 def timing(func):
     """this is outer clock function"""
@@ -72,8 +77,7 @@ def logit(file="excute.log"):
         return wrapper
     return exception
 
-from logging import handlers
-import os
+
 
 
 
@@ -90,12 +94,17 @@ class Logger(object):
     def setting(self, configuration: YAMLConfig = None):
     
         if configuration == None:
-            configuration = default_configuration
+            self.configuration=None
+            return
         self.configuration = configuration
         self.log_path=self.configuration.config["Path"]["log_path"]
     def __init__(self,filename,level='info',when='D',backCount=3,fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
         # self.setting(configuration)
+        self.console = sys.stdout
         self.filename=filename#os.path.join(os.path.abspath(self.log_path),"all.log")
+        self.file=None
+        print(self.filename)
+        file_base.create_file(self.filename)
         self.logger = logging.getLogger(self.filename)
         format_str = logging.Formatter(fmt)#设置日志格式
         self.logger.setLevel(self.level_relations.get(level))#设置日志级别
@@ -113,6 +122,25 @@ class Logger(object):
         # midnight 每天凌晨
         self.logger.addHandler(sh) #把对象加到logger里
         self.logger.addHandler(th)
+    def write(self, msg):
+        self.console.write(msg)
+        self.file=open(self.filename,"a")
+        if self.file is not None:
+            
+            self.file.write(msg)
+            self.file.close()
+
+    def flush(self):
+        self.console.flush()
+        # if self.file is not None:
+        #     self.file.flush()
+        #     os.fsync(self.file.fileno())
+    def close(self):
+        self.console.close()
+        if self.file is not None:
+            self.file.close()
+    def __del__(self):
+        self.close()
 # def get_log(path):
 #     formatter = logging.Formatter(fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s',level=logging.INFO)
 #     logging.basicConfig(level=logging.INFO,#控制台打印的日志级别
@@ -156,7 +184,9 @@ if __name__ == "__main__":
     # print(fib.__name__)  # 输出 clocked
     # print(fib.__doc__)  # 输出 this is inner clocked function
     
-    log = Logger('all.log',level='debug')
+    log = Logger('all.log')
+    sys.stdout =log
+    print("fffff")
     log.logger.debug('debug')
     log.logger.info('info')
     log.logger.warning('警告')

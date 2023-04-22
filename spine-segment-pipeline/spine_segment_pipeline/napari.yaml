@@ -7,6 +7,9 @@ contributions:
     - id: spine-segment-pipeline.label_widget # start label widget
       title: label widget
       python_name: spine_segment_pipeline:label_widget
+    - id: spine-segment-pipeline.predict_widget # start label widget
+      title: predict widget
+      python_name: spine_segment_pipeline:predict_widget  
     - id: spine-segment-pipeline.dendrite_2d # load sample
       title: dendrite 2d sample
       python_name: spine_segment_pipeline._sample_data:sample_den_2d
@@ -18,6 +21,9 @@ contributions:
       display_name: time widget # widget will show packagename+displayname in plugin menu ans widget docker
     - command: spine-segment-pipeline.label_widget  # 
       display_name: label widget # widget will show packagename+displayname in plugin menu ans widget docker
+    - command: spine-segment-pipeline.predict_widget  # 
+      display_name: predict widget # widget will show packagename+displayname in plugin menu ans widget docker
+      
       #autogenerate: true
   sample_data:
   - key: dendrite_2d
