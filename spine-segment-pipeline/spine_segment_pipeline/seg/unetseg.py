@@ -1,12 +1,20 @@
 
-# from ...train.networks import  unetplusplus
 import numpy as np
 
 from tqdm import tqdm
-from spinelib.cflow.blob import find_spheres, peakfilter, sphere_log
+from ..cflow.blob import find_spheres, peakfilter, sphere_log
 from . import segment
 from skimage.morphology import remove_small_objects
 from skimage.segmentation import watershed
+from torchvision.transforms import ToTensor
+
+def predict_2d_img(model,img):
+    image=img.astype("float32")
+    im=ToTensor()(image)#C H W
+    # im=im.expand(1,256,256,1)
+    im=im.unsqueeze(1)
+    ypred=model.forward(im)
+    return ypred[0].detach().numpy() 
 
 def predict_single_img(model,img):
     """
@@ -30,9 +38,9 @@ def predict_single_img(model,img):
     bgprs=[]
     # print(img.shape)
     for im in img:
-        ypred=model.predict_2d_img(im) #soft max,sigmoid
+        ypred=predict_2d_img(model,im) #soft max,sigmoid
         im=np.expand_dims(im,axis=0).astype(np.float32)
-        ypred=ypred.cpu().data.numpy()
+        #ypred=ypred
         mask = np.argmax(ypred, axis=0)
         spineprs.append(ypred[2])
         denprs.append(ypred[1])
@@ -80,9 +88,11 @@ def predict_time_imgs(self,imgs): # T [Z] H W
 def instance_unetmask_bypeak(spinepr,mask,searchbox,min_radius,spinesize_range=[4,800]):
     #outlayer:softmax
     #searchbox 2d,3d [25,25],[5,25,25]
-    pr_corner=peakfilter(spinepr,min_radius,0,use_gaussian=True)*(mask==2)#*adth
+    min_radius=int(min_radius)
+    min_radius=min_radius if min_radius>1 else 3
+    pr_corner=peakfilter(spinepr,min_radius,0,use_gaussian=True)*(mask)#*adth
     minspinesize,maxspinesize=spinesize_range
-    spine_label=segment.label_instance_water(spinepr,pr_corner,mask==2, 
+    spine_label=segment.label_instance_water(spinepr,pr_corner,mask, 
                                 maxspinesize,searchbox=searchbox)
 
 
@@ -91,11 +101,16 @@ def instance_unetmask_bypeak(spinepr,mask,searchbox,min_radius,spinesize_range=[
 
 def instance_unetmask_by_border(spinepr,mask,bgpr,th,spinesize_range=[4,800]):
     #outlayer sigmoid
+    minspinesize,maxspinesize=spinesize_range
     mask2=mask & (bgpr<th)
     labels,num=segment.ndilable(mask2,2)
-    spine_label=watershed(-spinepr,labels,mask=mask)
-    minspinesize,maxspinesize=spinesize_range
+    labels=remove_small_objects(labels,minspinesize)
+    
+    spine_label=watershed(-spinepr,labels,mask=mask,connectivity=2)
+    labels2=mask>spine_label
+    labels2,num2=segment.ndilable(labels2,num+1)
+    
     
     spine_label=remove_small_objects(spine_label,min_size=minspinesize)
-    return spine_label
+    return spine_label+labels2
     

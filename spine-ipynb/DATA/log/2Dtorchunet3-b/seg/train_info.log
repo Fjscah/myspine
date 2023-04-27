@@ -1,0 +1,55 @@
+2023-04-24 14:10:24,991 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 14:13:13,285 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 14:18:59,577 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 14:25:12,545 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 14:37:02,183 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 14:42:52,692 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 14:44:18,596 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 17:07:30,450 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 17:18:19,204 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 17:20:35,511 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+
+2023-04-24 17:38:19,990 - ..\train\trainers\predict.py[line:96] - INFO: 
+==============LOAD PRETRAINED model==============
+E:\code\test-dataset\model\2Dtorchunet3-b\seg\ep050-loss0.428.pth
+=================================================
+

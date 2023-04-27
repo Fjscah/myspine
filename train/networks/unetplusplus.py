@@ -5,14 +5,8 @@ from torchsummary import summary
 
 __all__ = ['UNet2d', 'NestedUNet']
 
-class Network_profile:
-    def load_network_set(self,nextconfig):
-        self.layer_num=nextconfig['layer_num']
-        out_layer=nextconfig['out_layer']
-        if "sigmoid"==out_layer:
-            self.out=torch.nn.Sigmoid() 
-        else:
-            self.out=torch.nn.Softmax(dim=1)
+# class Network_profile:
+    
     
     
         
@@ -23,7 +17,14 @@ class BaseModel(nn.Module):
         # im=im.expand(1,256,256,1)
         im=im.unsqueeze(1)
         ypred=self.forward(im)
-        return ypred[0].detach().numpy()           
+        return ypred[0].detach().numpy()   
+    def load_network_set(self,nextconfig):
+        self.layer_num=nextconfig['layer_num']
+        out_layer=nextconfig['out_layer']
+        if "sigmoid"==out_layer:
+            self.out=torch.nn.Sigmoid() 
+        else:
+            self.out=torch.nn.Softmax(dim=1)        
 class VGGBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, out_channels):
         super().__init__()
@@ -45,12 +46,12 @@ class VGGBlock(nn.Module):
         return out
 
         
-class UNet2d(BaseModel,Network_profile):
+class UNet2d(BaseModel):
     def __init__(self, num_classes, input_channels=3, **kwargs):
         super().__init__()
         self.layer_num=4
         nb_filter = [32, 64, 128, 256, 512]
-
+        self.norm=nn.InstanceNorm2d(input_channels)
         self.pool = nn.MaxPool2d(2, 2)
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
@@ -67,8 +68,9 @@ class UNet2d(BaseModel,Network_profile):
 
         self.final = nn.Conv2d(nb_filter[0], num_classes, kernel_size=1)
         # self.soft=nn.Softmax(dim=1)
-
+    
     def forward(self, input):
+        input=self.norm(input)
         x0_0 = self.conv0_0(input)
         x1_0 = self.conv1_0(self.pool(x0_0))
         x2_0 = self.conv2_0(self.pool(x1_0))
@@ -83,6 +85,7 @@ class UNet2d(BaseModel,Network_profile):
             x0_3 = self.conv0_4(torch.cat([x0_0, self.up(x1_2)], 1))
             output = self.final(x0_3)
         if self.layer_num==4:
+            x3_0 = self.conv3_0(self.pool(x2_0))
             x4_0 = self.conv4_0(self.pool(x3_0))
             x3_1 = self.conv3_1(torch.cat([x3_0, self.up(x4_0)], 1))   
             x2_2 = self.conv2_2(torch.cat([x2_0, self.up(x3_1)], 1))
@@ -92,12 +95,12 @@ class UNet2d(BaseModel,Network_profile):
         output=self.out(output)
         return output
 
-class NestedUNet(BaseModel,Network_profile):
+class NestedUNet(BaseModel):
     def __init__(self, num_classes, input_channels=1, deep_supervision=False, **kwargs):
         super().__init__()
 
         nb_filter = [32, 64, 128, 256, 512]
-
+        self.norm=nn.InstanceNorm2d(input_channels)
         self.deep_supervision = deep_supervision
 
         self.pool = nn.MaxPool2d(2, 2)
@@ -133,6 +136,7 @@ class NestedUNet(BaseModel,Network_profile):
             # self.soft=nn.Softmax(dim=1)
     
     def forward(self, input):
+        input=self.norm(input)
         x0_0 = self.conv0_0(input) # input N,C,H,W
         x1_0 = self.conv1_0(self.pool(x0_0))
         x0_1 = self.conv0_1(torch.cat([x0_0, self.up(x1_0)], 1))
@@ -205,7 +209,13 @@ class CNN(nn.Module):
 
         output=self.model(input)
         return output
-
+def savemodel(model,path,inn):
+    # inn=torch.tensor(torch.rand(size=(1,1,256,256))).to("cuda")
+    model = torch.jit.trace(model,inn)
+    torch.jit.save(model,path)
+    # torch.save(model,path)
 if __name__=="__main__":
-    model=CNN(2,1,16).cuda()
-    summary(model,(1,16,16))
+    # model=CNN(2,1,16).cuda()
+    # summary(model,(1,16,16))
+    model=UNet2d(3,1)
+    savemodel(model,"kk.pth")

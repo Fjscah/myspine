@@ -23,7 +23,7 @@ class BaseModel(nn.Module):
         # im=im.expand(1,256,256,1)
         im=im.unsqueeze(1)
         ypred=self.forward(im)
-        return ypred[0]           
+        return ypred[0].detach().numpy()           
 class VGGBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, out_channels):
         super().__init__()
@@ -51,6 +51,7 @@ class UNet2d(BaseModel,Network_profile):
         self.layer_num=4
         nb_filter = [32, 64, 128, 256, 512]
 
+        self.norm=nn.InstanceNorm2d(input_channels)
         self.pool = nn.MaxPool2d(2, 2)
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
@@ -69,6 +70,7 @@ class UNet2d(BaseModel,Network_profile):
         # self.soft=nn.Softmax(dim=1)
 
     def forward(self, input):
+        input=self.norm(input)
         x0_0 = self.conv0_0(input)
         x1_0 = self.conv1_0(self.pool(x0_0))
         x2_0 = self.conv2_0(self.pool(x1_0))
@@ -98,6 +100,7 @@ class NestedUNet(BaseModel,Network_profile):
 
         nb_filter = [32, 64, 128, 256, 512]
 
+        self.norm=nn.InstanceNorm2d(input_channels)
         self.deep_supervision = deep_supervision
 
         self.pool = nn.MaxPool2d(2, 2)
@@ -133,6 +136,7 @@ class NestedUNet(BaseModel,Network_profile):
             # self.soft=nn.Softmax(dim=1)
     
     def forward(self, input):
+        input=self.norm(input)
         x0_0 = self.conv0_0(input) # input N,C,H,W
         x1_0 = self.conv1_0(self.pool(x0_0))
         x0_1 = self.conv0_1(torch.cat([x0_0, self.up(x1_0)], 1))

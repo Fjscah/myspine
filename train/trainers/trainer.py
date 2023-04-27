@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from skimage import io
 from torch.utils.data import DataLoader
-
+import time
 import numpy as np
 import scipy.signal
 
@@ -26,7 +26,7 @@ from torchvision import datasets, transforms
 from tqdm import tqdm
 import torch.optim as optim 
 from torch.optim import Adam,AdamW,Adagrad,RMSprop,SGD
-from ..networks import unetplusplus
+from ..networks.unetplusplus import NestedUNet,UNet2d,savemodel
 sys.path.append(".")
 from utils import file_base
 
@@ -101,6 +101,7 @@ class LossHistory:
             f.write(string)
             f.write("\n")
         pltflag=(epoch%50==0) &(epoch>0)
+        pltflag=pltflag or (epoch%50==49) &(epoch>0)
         if pltflag:
             self.loss_plot()
        
@@ -152,7 +153,7 @@ class LossHistory:
                 'green',
                 linestyle='--',
                 linewidth=2,
-                label='smooth train loss')
+                label='smooth train MIoU')
             plt.plot(
                     iters,
                     scipy.signal.savgol_filter(
@@ -160,7 +161,7 @@ class LossHistory:
                     '#8B4513',
                     linestyle='--',
                     linewidth=2,
-                    label='smooth val loss')
+                    label='smooth val MIou')
         except:
             pass
 
@@ -283,9 +284,9 @@ class Trainer:
         if "unet3d" == network_type:
             self.model = unet.UNet3D(self.configuration)
         elif "unet2d" == network_type:
-            self.model =unetplusplus.UNet2d(num_classes,1)
+            self.model =UNet2d(num_classes,1)
         elif "unet++"==network_type:
-            self.model=unetplusplus.NestedUNet(num_classes,1)
+            self.model=NestedUNet(num_classes,1)
         self.model.load_network_set(self.network_info)
         self.model.to(self.device)
         
@@ -416,6 +417,7 @@ class Trainer:
         #-----------------------#
         #   data load  #
         #-----------------------#
+        t1=time.time()
         train_trainform=get_train_tranform()
         self.enhance_border=True if "border" in self.save_suffix else False
         train_datast=CustomDatasetUnet2D(Train_path + "\\train",suffix,num_classes,transform=train_trainform,iteration=epoch_iterration,des="train",enhance_border=self.enhance_border)
@@ -464,8 +466,12 @@ class Trainer:
         #-----------------------#
         create_dir(os.path.join(self.model_path ,"checkpoint"))
         val_log=self.valid_epoch(valid_dataloader,model,lossfunc,metric)
+        # best_iou = val_log['iou']
+        bestpath=os.path.join(self.model_path ,"checkpoint","best.pt")
+        savemodel(self.model,bestpath,torch.zeros(1,1,self.input_sizexy,self.input_sizexy).to(self.device))
         best_iou = val_log['iou']
-        print("baestloss",val_log['loss'],"best_iou",best_iou)
+        print("=> saved inital best model",bestpath)
+        print("baest loss",val_log['loss'],"best_iou",best_iou)
         for epoch in range(self.epochs):
             if self.use_gpu:
                 gpu_use_info=f", {torch.cuda.get_device_name(0)} Memory Usage : Allocated-{round(torch.cuda.memory_allocated(0)/1024**3,1)} GB , Cached-{round(torch.cuda.memory_reserved(0)/1024**3,1)} GB"
@@ -496,7 +502,9 @@ class Trainer:
             if val_log['iou'] > best_iou:
                 filepath=os.path.join(self.model_path , 'ep{0:03d}-loss{1:.3f}.pth'.format(epoch,val_log['loss']))
                 torch.save(model.state_dict(), filepath)
-                torch.save(model,os.path.join(self.model_path ,"checkpoint","best.pth"))
+                savemodel(self.model,bestpath,torch.zeros(1,1,self.input_sizexy,self.input_sizexy).to(self.device))
+                
+              #  torch.save(model,os.path.join(self.model_path ,"checkpoint","best.pt"))
                 best_iou = val_log['iou']
                 print("=> saved best model",filepath)
                 # delete old version weights
@@ -510,7 +518,14 @@ class Trainer:
                 torch.cuda.empty_cache()
         # return metric, self.best_metric 
         print("best_iou",best_iou)
-
+        t2=time.time()
+        run_time=t2-t1
+        # 计算时分秒
+        hour = run_time//3600
+        minute = (run_time-3600*hour)//60
+        second = run_time-3600*hour-60*minute
+        # 输出
+        print (f'Running time ：{hour} hour {minute} minute {second} second')
 
 
 if __name__ == "__main__":

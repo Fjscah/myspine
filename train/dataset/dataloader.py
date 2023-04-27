@@ -55,7 +55,7 @@ from torch.utils.data import DataLoader
 
 from skimage.morphology import binary_dilation, convex_hull_image, dilation,binary_erosion
 
-
+from . import enhancer 
 from scipy.ndimage import distance_transform_edt
 
 class CustomDatasetUnet2D(Dataset):
@@ -390,6 +390,58 @@ class SliceLoader:
                 _,name,suffix=file_base.split_filename(labfile)
                 shutil.copyfile(labfile, os.path.join(labdir,name+suffix))
             print("complete folder : ", os.path.join(Train_path,path_type))
+            
+    def crop_and_split_data(self,itern=10,split_partion=[]):
+        Train_path=self.Train_path
+        if not split_partion:
+            split_partion=self.partion # train,valid,test+=1
+        accu_partion=[split_partion[0],split_partion[0]+split_partion[1],1]
+        path_ts=["train","valid","test"]
+        imdir=os.path.abspath(self.oridata_path)
+        ladir=os.path.abspath(self.orilabel_path)
+        imfiles=file_base.file_list(imdir)
+        lafiles=file_base.file_list(ladir)
+        pairs=file_base.pair_files(imfiles,lafiles,self.label_suffix)
+        length=len(pairs)
+        t=0
+        w=self.input_sizexy
+        nz=self.input_sizez
+        if nz>1:
+            outsize=(nz,w,w)# 3d
+        else:
+            outsize=(w,w)#2d
+        lists=np.random.choice(length,length,False)
+        files_splits=[]
+        infos=[]
+        for path_type,p in zip(path_ts,accu_partion):
+            inds=lists[t:int(p*length)]
+            inds=list(range(t,int(p*length)))
+            files=[pairs[i] for i in inds]
+            t=int(p*length)
+            imgodir=os.path.join(Train_path,path_type+"/img")
+            labodir=os.path.join(Train_path,path_type+"/label")
+            file_base.remove_dir(imgodir)
+            file_base.create_dir(imgodir)
+            file_base.remove_dir(labodir)
+            file_base.create_dir(labodir)
+            cnt=enhancer.generate_crop_img_save_list(
+                files,imgodir,labodir,outsize,
+                depth=nz,
+                iter=itern,savetype=self.save_suffix,
+            )
+            if files:
+                files_splits.append(files)
+            else:
+                files.append([])
+            infos.append({"complete folder : ": os.path.join(Train_path,path_type),"img num":len(files),"crop num":cnt})
+            print("complete folder : ", os.path.join(Train_path,path_type),"img num",len(files),"crop num",cnt)
+        for info,fs in zip(infos,files_splits):
+            print(info)
+            for f1,f2 in fs:
+                print(f1,f2)
+           
+    
+    
     @staticmethod
     def show_data(ds):
         def showtwo(im1,im2):

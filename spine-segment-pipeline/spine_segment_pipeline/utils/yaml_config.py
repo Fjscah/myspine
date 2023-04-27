@@ -6,8 +6,11 @@ from .file_base import create_dir,split_filename
 class YAMLConfig:
     def __init__(self, path):
         if not path: return
-        with open(str(path), 'r') as stream:
-            self.config = yaml.safe_load(stream)
+        dirpath,shorname,suffix=split_filename(path)
+        self.config_path=os.path.abspath(dirpath)
+        print("configure file path",self.config_path)
+        with open(str(path), 'r') as f:
+            self.config = yaml.safe_load(f)
             self.init_default()
     def init_default(self):
         #dict_a = self.config["Path"]

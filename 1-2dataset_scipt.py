@@ -16,7 +16,7 @@ import numpy as np
 configfile=r"config\defalut_2d_border.yaml"
 
 get_seg_tif_flag=False
-crop_tif_flag   =False
+crop_tif_flag   =True
 split_tif_flag  =True
 #==================================================================================
 

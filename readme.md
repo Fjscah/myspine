@@ -56,11 +56,11 @@ The peocedure had only been tested with **torch-gpu version at windows platform*
 
    torch downloadlink: https://pytorch.org/
 
-2. install packages  , run `pip install -r requirement.txt` in terminal. The module 'gwdt' (optional) need be build by yourself ( make sure you have microsoft C++ buld tool and Cpython)
+2. install packages  , run `pip install -r requirement.txt` in terminal ? . The module 'gwdt' (optional) need be build by yourself ( make sure you have microsoft C++ buld tool and Cpython , just install it like common python package : `python setup.py install`)
 
    gwdt download link: https://github.com/chunglabmit/gwdt
 
-3. install napari plugin , run `environment_bat.bat`in terminal
+3. install napari plugin , run `environment_bat.bat’`in terminal
 4. vscode  with python extension(optional):
 
    vscode download link : https://code.visualstudio.com/
@@ -76,10 +76,8 @@ environment_bat.bat
 
 ## demo dataset download link: 
 
-download dataset and put dataset folder in the program folder.
-https://www.jianguoyun.com/p/Dcha3qUQ297KCxjPmIIFIAA 
-
-(password：please contact us , data isn't mine), include:
+download dataset and move my-dataset to the program folder.
+https://www.jianguoyun.com/p/Dcha3qUQ297KCxjPmIIFIAA (password：please contact us , data isn't mine), include:
 
 1. dataset :
    1. crop imgs (npy.npz) for SVM/CNN classifier training
@@ -87,19 +85,26 @@ https://www.jianguoyun.com/p/Dcha3qUQ297KCxjPmIIFIAA
    3. test image data for label plugin
 2. configure file: yaml files
 3. trained model : SVM, CNN , Unet2d model
+   * SVM , *.pickle
+   * CNN , *.pt
+   * UNet model : 
+      * *.pth store static_dict for training
+      * *pt store whole model for predict plugin
 
    
 
 # Simple usage
 
-## Part1 : prepare annotate dataset (label plugin)
-you can run `napari` in terminal or run `0napari_viewer.py` to open napari
+## Part1 : prepare annotation dataset (label plugin)
 
-click pluin -> spine-segment-pipeline will see widgets. 
+You can obtain custom dataset by `napari` or any other methods. 
 
-The plugin usage see:
+If you choose `napari`, here we provide a napari plugin for preparing annotation dataset. 
+
+you can run `napari` in terminal or run `0napari_viewer.py` to open napari,click pluin -> spine-segment-pipeline will see widgets. The plugin usage see:
 
  [spine-segment-pipeline pluin usage](/spine-segment-pipeline)
+
 
 ## Part2 : train your dataset
 
@@ -134,7 +139,7 @@ obtain crop image by label plugin and train data by
 
       “object_and_track.ipynb” script in spine-ipynb folder , and each code block has a brief introduction
 ## Part 3 (optional)   
-1. transform roi to to imageJ roi file format : use [LabelsToROIs](https://labelstorois.github.io/) plugin  
+1. transform roi to to imageJ roi file format : use [LabelsToROIs](https://labelstorois.github.io/) plugin \: 
 2. ipynb script
 
    these haved been checked. 
@@ -194,8 +199,8 @@ Path:
    # datset folder and model/log save folder
    Train_path: E:\data\Train\Train/2D-2023-seg/ # dataset root folder
 
-   oridata_path: "" #  defalt  Train_path/img    stroe large img 
-   orilabel_path: "" # defalt  Train_path/label  stroe label for img 
+   oridata_path: "" #  defalt  Train_path/img    store large img 
+   orilabel_path: "" # defalt  Train_path/label  store label for img 
   
    data_path: "" #  defalt Train_path/imgcrop    store small img 
    label_path: "" # defalt  Train_path/labelcrop will crop from whole img 
@@ -215,6 +220,19 @@ Training:
    # trian profile, like optimizer, loss func ...
   
 ```
+
+The picture illustrates each path' data type, you can run `1dataset_script.py` to obtain crop data and split crop date into train/valid/test folder. Train step will load data from train and test folder.
+
+![1666879731179|300x400](image/dataset-path-illustration.png "dataset path illustration")
+
+# Upgrade information
+
+20230427
+1. fix bug: napari pluin run at current folder only -> also other folder, by `torch.jit`
+2. add another instance segment stratage, by backgournd threshold.
+3. show error information when load model raise Error.
+4. provide two ways for spliting datset : 1. split ori-image first then crop data (1-1dataset_scipt.py), 2. crop data first then split crop data to tran/valid/test(1-2dataset_scipy.py). 
+
 
 # history readme 
 

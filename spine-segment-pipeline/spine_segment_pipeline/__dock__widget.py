@@ -34,7 +34,7 @@ from psygnal import Signal
 
 from napari.utils.notifications import show_info
 
-from .networks.unetplusplus import UNet2d,NestedUNet,CNN
+# from .networks.unetplusplus import UNet2d,NestedUNet,CNN
 from .imgio import napari_base
 from .seg import segment
 from .seg import unetseg
@@ -100,6 +100,11 @@ DEFAULTS = dict(norm_image=True,
                 )
 
 Bmethod_func,Bmethod_name=all_threshold_func()
+Instance_funcname=["peak","background"]
+Instance_funcdict={
+    "peak":unetseg.instance_unetmask_bypeak,
+    "background":unetseg.instance_unetmask_by_border,
+}
 net_method=["unet2d","unet++2d","unet3d"]
 measurement_choices=["all","area",
                      "mean_intensity",
@@ -146,14 +151,10 @@ def filter_pd(points,image,clfs):
 
 
 def load_file_model(filepath):
-    #lmodel=CNN(2)
-    #lmodel.build(input_shape=(None,16,16,1))
-    #lmodel.summary() 
-    # checkponit_save_path= r"D:\spine\segment\some_analysis_for_spine_img\ipynb\model\temp\variables\variables"
-    # if os.path.exists(checkponit_save_path+".index"):
-    #     print("------------load the model -------------")
-    #lmodel.load_weights(filepath)
-    lmodel=torch.load(filepath,map_location=torch.device('cpu'))
+    lmodel=torch.jit.load(filepath,map_location=torch.device('cpu'))
+    # except Exception as e:
+    #     show_info(e)
+    #     return None
     return lmodel
   
 def reshape_data(XX,shape):
@@ -551,6 +552,7 @@ def plugin_wrapper1():
         elif spotmethod=="CNN":
             mfile=get_value_plugin("modelfile")
             lmodel=load_file_model(mfile)
+            if lmodel is None: return
             lmodel.to("cpu")
             points,points2=model_predict(points,img,lmodel,boxsize=(16,16))
         elif spotmethod=="SVM":
@@ -854,6 +856,7 @@ def plugin_wrapper2():
         ),       
         spinepr=dict(label="spine pr"),
         denpr=dict(label="dendrite pr"),
+        bgpr=dict(label="background pr"),
         mask=dict(label="mask Image"),
         spine=dict(label="spine layer"),
         # segmask=dict(label="segment layer"),
@@ -886,7 +889,13 @@ def plugin_wrapper2():
         
         preprocess3=dict(widget_type="Label",
                          label="<br><b>3.instance segment</b>"),
+        instance_method=dict(
+            widget_type="ComboBox",
+            label="Instance method",
+            choices=Instance_funcname,
+            value=Instance_funcname[0]),
         radiusrange=dict(widget_type="LineEdit", label="radius", value="5"),
+       # bgth=dict(widget_type="LineEdit",label="spine threshold",value="0.1"),
         minspinesize=dict(
             widget_type="SpinBox",
             label="spine min pixels",
@@ -929,6 +938,7 @@ def plugin_wrapper2():
         
         spinepr: napari.layers.Image,
         denpr: napari.layers.Image,
+        bgpr: napari.layers.Image,
         mask:napari.layers.Labels,
         spine:napari.layers.Labels,
         # segmask:napari.layers.Labels,
@@ -946,7 +956,9 @@ def plugin_wrapper2():
         adth_button,
         
         preprocess3,
+        instance_method,
         radiusrange,
+        # bgth,
         minspinesize,
         maxspinesize,
         run_spine,
@@ -972,6 +984,12 @@ def plugin_wrapper2():
         else:
             plugin.threshold1.hide() 
             plugin.threshold2.hide() 
+        instance_m=get_value_plugin("instance method") # str
+        if (instance_m=="peak"):
+            # plugin.bgth.hide()
+            plugin.radiusrange.label="radius"
+        else:
+            plugin.radiusrange.label="bg threshold"
         #lambdav.hide() 
         # plugin.mips=[
         #             plugin.MIPimage,
@@ -1000,7 +1018,7 @@ def plugin_wrapper2():
             func=Bmethod_func[methodname]
             return func
         if keystr=="radiusrange":
-            return int(plugin.radiusrange.value)
+            return float(plugin.radiusrange.value)
         if keystr=="Network":
             return plugin.model_name.value
         if keystr=="modelwieght":
@@ -1017,6 +1035,8 @@ def plugin_wrapper2():
             return int(plugin.track_method.value)
         if keystr=="startlabel":
             return int(plugin.startlabel.value)
+        if keystr=="instance method":
+            return plugin.instance_method.value
     #-----------------------#
     #  utils for get value   #
     #-----------------------#
@@ -1064,9 +1084,10 @@ def plugin_wrapper2():
             messg=QMessageBox(None)
             messg.setText("Plase check image: only "+str(imgs.ndim)+" dimension!")
             messg.exec_()
-            return UNet2d,NestedUNet
+            return 
         if network=="unet2d":
             model=load_file_model(modelpath)
+            if model is None: return
             all_mask,all_spine_pr,all_den_pr,bgpr=unetseg.predict_single_img(model,imgs)
             # model=UNet2d()
             # h,w=imgs.shape[-2:]
@@ -1079,10 +1100,12 @@ def plugin_wrapper2():
                 opacity=0.5, blending="additive")
             all_mask=modify_mask(all_mask,sizeth=4)
             im3=plugin.viewer.value.add_labels(all_mask, name="seg_mask",opacity=0.5)
-            
+            im4=plugin.viewer.value.add_image(bgpr, name="bg_pr",colormap="gray_r",visible=False,
+                opacity=0.5, blending="additive")
             plugin.spinepr.value=im1
             plugin.denpr.value=im2
             plugin.mask.value=im3
+            plugin.bgpr.value=im4
             # plugin._all_mask=all_mask
             plugin._model=model
     @change_handler(plugin.bmethod, init=False)
@@ -1096,6 +1119,14 @@ def plugin_wrapper2():
         else:
             plugin.threshold1.hide() 
             plugin.threshold2.hide() 
+    @change_handler(plugin.instance_method, init=False)
+    def _instance_method(model_name_star: str): 
+        instance_m=get_value_plugin("instance method") # str      
+        if (instance_m=="peak"):
+            # plugin.bgth.hide()
+            plugin.radiusrange.label="radius"
+        else:
+            plugin.radiusrange.label="bg threshold"
             
     # @change_handler(plugin.axes, init=False)
     # def _axes(model_name_star: str): 
@@ -1136,7 +1167,7 @@ def plugin_wrapper2():
             searchbox=[5,5,5]
         else:
             searchbox=[5,5]
-        radius=get_value_plugin("radiusrange")
+        radius=get_value_plugin("radiusrange") # or bgth
         minspinesize,maxspinesize=get_value_plugin("spinesize")
         #print(minspinesize,maxspinesize)
         spinepl=plugin.spinepr
@@ -1147,8 +1178,15 @@ def plugin_wrapper2():
         masks=maskl.value.data
         spineprs=spinepl.value.data
         
-        spine_label=unetseg.instance_unetmask_bypeak(spineprs,masks,searchbox,radius,spinesize_range=[minspinesize,maxspinesize])
-        
+        instance_m=get_value_plugin("instance method") 
+        instance_func=Instance_funcdict[instance_m]
+        show_info("run func: "+instance_func.__name__)
+        if instance_m=="peak":
+            spine_label=instance_func(spineprs,masks==2,searchbox,radius,spinesize_range=[minspinesize,maxspinesize])
+        elif instance_m=="background":
+            bgpr=plugin.bgpr.value.data
+            spine_label=instance_func(spineprs,masks==2,bgpr,radius,spinesize_range=[minspinesize,maxspinesize])
+            
         # pr_corner=peakfilter(spineprs,radius,0,use_gaussian=False)*(masks)#*adth
         # spine_label=segment.label_instance_water(spineprs,pr_corner,masks, 
         #                                 maxspinesize,searchbox=searchbox)

@@ -32,7 +32,7 @@ import imgaug as ia
 # map per image. You want to augment each image and its heatmaps identically.
 import matplotlib.pyplot as plt
 from .segment import fill_hulls,resortseg
-from .dataloader import load_img,show_two
+from . import dataloader 
 from utils.yaml_config import YAMLConfig
 from .localthreshold import local_threshold
 from skimage.filters.thresholding import (threshold_isodata, threshold_li,
@@ -41,6 +41,7 @@ from skimage.filters.thresholding import (threshold_isodata, threshold_li,
                                           threshold_niblack, threshold_otsu,
                                           threshold_triangle, threshold_yen,threshold_local)
 import tifffile
+# from .dataloader import load_img
 def savelabel(arr,filename):
     tifffile.imwrite(
         filename,
@@ -49,7 +50,7 @@ def savelabel(arr,filename):
         photometric='minisblack',
         #metadata={'axes': 'TYX'},
     )
-    print("save :",filename)
+    # print("save :",os.path.abspath(filename))
 def savepr(arr,filename):
     tifffile.imwrite(
         filename,
@@ -58,66 +59,39 @@ def savepr(arr,filename):
         photometric='minisblack',
         #metadata={'axes': 'TYX'},
     )
-    print("save :",filename)
+    # print("save :",os.path.abspath(filename))
 #-----------------------#
 #  custom Transform online   #
 #-----------------------#
 
 
-
+np.random.choice(6,5,False)
 #-----------------------#
 #  custom Transform offline   #
 #-----------------------#
-def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=True,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
-    """from pdir,load img and label,then crop or tanseform to generate more img and save in odir
-
-    Args:
-        imdir (_type_): _description_
-        ladir (_type_): _description_
-        imodir (_type_): _description_
-        laodir (_type_): _description_
-        outsize (_type_): xyshape
-        note (str, optional): suffix for label file. Defaults to "seg".
-        hull (bool, optional): whethre hull for roi point. Defaults to True.
-        depth (int, optional): z. Defaults to 10.
-        iter (int, optional): generate how much crop image for each image. Defaults to 10.
-        denmode: use for only spine label no dendrite label
-    Raises:
-        FileNotFoundError: _description_
-
-    Returns:
-        _type_: None
-    """
-    imdir=os.path.abspath(imdir)
-    ladir=os.path.abspath(ladir)
-    imfiles=file_base.file_list(imdir)
-    lafiles=file_base.file_list(ladir)
-    file_base.remove_dir(imodir)
-    file_base.remove_dir(laodir)
-    file_base.create_dir(imodir)
-    file_base.create_dir(laodir)
-    pairs=file_base.pair_files(imfiles,lafiles,note)
+def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
     images=[]
     segmaps=[]
     #print(imdir,"\n",ladir,imfiles,lafiles,pairs)
+    if len(pairs)==0:
+        print("empty imgs, please check")
+        return 0
     print("outsize :",outsize)
     
     for img,labelf in pairs:
         print(img,"\t",labelf)
-        if depth>1:
-            im=load_img(img)[:depth]
-            lab=load_img(labelf)[:depth]
+        if depth>1: # z larer num
+            im=dataloader.load_img(img)[:depth]
+            lab=dataloader.load_img(labelf)[:depth]
         else:
-            im=load_img(img)
-            lab=load_img(labelf)
+            im=dataloader.load_img(img)
+            lab=dataloader.load_img(labelf)
         # print(im.shape)
         lab=lab.astype(np.uint16)
         if 'border' in savetype:
             border=get_joint_border2(lab,2)
             lab[lab>1]=2
             lab[border]=3
-            # plt.imshow(lab)
-            # plt.show()
         elif "spine" not in savetype:
             lab[lab>1]=2
         
@@ -139,25 +113,27 @@ def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=Tru
         else:
             im=im[..., np.newaxis]
             lab=lab[..., np.newaxis]
+        # plt.imshow(lab)
+        # plt.show()
         #show_two(im,lab)
         #im = normalize(im,1,99.8,axis=None)
         #im = normalize(im,1,99.8,axis=None)
         images.append(im)
         segmaps.append(lab)
-    if hull:
-        hulldir="hulldir"
-        hulldir=os.path.join(file_base.get_parent_dir(imdir,1),hulldir)
-        file_base.create_dir(hulldir)
-        for seg,(img,labelf) in zip(segmaps,pairs):
-            f=os.path.basename(labelf)
-            of=os.path.join(hulldir,f)
-            seg=seg.swapaxes(0,2)
-            imsave(of,seg)
+    # if hull:
+    #     hulldir="hulldir"
+    #     hulldir=os.path.join(file_base.get_parent_dir(imdir,1),hulldir)
+    #     file_base.create_dir(hulldir)
+    #     for seg,(img,labelf) in zip(segmaps,pairs):
+    #         f=os.path.basename(labelf)
+    #         of=os.path.join(hulldir,f)
+    #         seg=seg.swapaxes(0,2)
+    #         imsave(of,seg)
             
     if cval is None:
         # threshold_li()
-        vmean=np.nanmean([np.mean(im[lab==0]) for im,lab in zip(images,segmaps)])
-        vstd=np.nanmean([np.std(im[lab==0]) for im,lab in zip(images,segmaps)])
+        vmean=np.nanmean([np.nanmean(im[lab==0]) for im,lab in zip(images,segmaps)])
+        vstd=np.nanmean([np.nanstd(im[lab==0]) for im,lab in zip(images,segmaps)])
         print(vmean,vstd)
         cval=(int(max(0,vmean-vstd)),int(vmean+vstd))
         
@@ -197,6 +173,7 @@ def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=Tru
         #iaa.Crop(px=(0, 10))
     ])
     N=len(images)
+    cnt0=0
     for it in range(iter):
         images_aug, segmaps_aug = seq(images=images, segmentation_maps=segmaps)
         for n,(im1,im2) in enumerate(zip(images_aug,segmaps_aug)):
@@ -213,7 +190,59 @@ def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=Tru
             # imsave(oim,im1)
             savepr(im1,oim)
             savelabel(im2,ola)
-            # imsave(ola,im2)
+            cnt0+=1
+    # print("save crop num",cnt0)
+    return cnt0
+
+def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=True,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
+    """from pdir,load img and label,then crop or tanseform to generate more img and save in odir
+
+    Args:
+        imdir (_type_): _description_
+        ladir (_type_): _description_
+        imodir (_type_): _description_
+        laodir (_type_): _description_
+        outsize (_type_): xyshape
+        note (str, optional): suffix for label file. Defaults to "seg".
+        hull (bool, optional): whethre hull for roi point. Defaults to True.
+        depth (int, optional): z. Defaults to 10.
+        iter (int, optional): generate how much crop image for each image. Defaults to 10.
+        denmode: use for only spine label no dendrite label
+    Raises:
+        FileNotFoundError: _description_
+
+    Returns:
+        _type_: None
+    """
+    imdir=os.path.abspath(imdir)
+    ladir=os.path.abspath(ladir)
+    imfiles=file_base.file_list(imdir)
+    lafiles=file_base.file_list(ladir)
+    file_base.remove_dir(imodir)
+    file_base.remove_dir(laodir)
+    file_base.create_dir(imodir)
+    file_base.create_dir(laodir)
+    pairs=file_base.pair_files(imfiles,lafiles,note)
+    generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=True,depth=1,iter=50,cval=None,denmode=False,savetype="seg")
+
+def generte_crop_img_save_split(imdir,ladir,imodir,laodir,outsize,note="seg",hull=True,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
+    """generate crop data for train, valid , test directly 
+
+    Args:
+        imdir (str): folder
+        ladir (str): folder
+        imodir (str): folder
+        laodir (str): folder
+        outsize (_type_): _description_
+        note (str, optional): _description_. Defaults to "seg".
+        hull (bool, optional): _description_. Defaults to True.
+        depth (int, optional): _description_. Defaults to 10.
+        iter (int, optional): _description_. Defaults to 10.
+        cval (_type_, optional): _description_. Defaults to None.
+        denmode (bool, optional): _description_. Defaults to False.
+        savetype (str, optional): _description_. Defaults to "seg".
+    """
+    pass
 
 def get_joint_border(label,ignore=[]):#bug
     label=label.copy()

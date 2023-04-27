@@ -1,6 +1,6 @@
 
 Path:
-  Train_path: myspine-dataset/2D-morph-seg/ # dataset root folder
+  Train_path: ../myspine-dataset/2D-morph-border/ # dataset root folder
 
   oridata_path: "" #  defalt  Train_path/img    stroe large img eg 512*512
   orilabel_path: "" # defalt  Train_path/label  stroe label for img eg 512*512
@@ -25,7 +25,7 @@ Data:
   input_sizexy: 256   # 256*256,Input feature width/height,for crop generate img data
   num_classes: 3 # include zero background
   inputchannel: 1 # 1: grayscale,todo
-  partion : [0.6,0.2,0.2] # train,valid,test+=1
+  partion : [0.8,0.2,0.0]  # train,valid,test+=1
   c_val : "auto" # background value
 
  

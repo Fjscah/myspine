@@ -1,5 +1,4 @@
 
-# from ...train.networks import  unetplusplus
 import numpy as np
 
 from tqdm import tqdm
@@ -32,7 +31,7 @@ def predict_single_img(model,img):
     for im in img:
         ypred=model.predict_2d_img(im) #soft max,sigmoid
         im=np.expand_dims(im,axis=0).astype(np.float32)
-        ypred=ypred.cpu().data.numpy()
+        ypred=ypred
         mask = np.argmax(ypred, axis=0)
         spineprs.append(ypred[2])
         denprs.append(ypred[1])
@@ -57,25 +56,29 @@ def predict_single_img(model,img):
         
     
 
-def predict_time_imgs(self,imgs): # T [Z] H W
+def predict_time_imgs(model,imgs): # T [Z] H W
     # print("img shape : ",img.shape)
     masks=[]
     spine_prs=[]
     den_prs=[]
+    bg_prs=[]
     n_frames=imgs.shape[0]
     for i in tqdm(range(n_frames), desc='Processing'):
         img=imgs[i]
-        mask,spineprs,denprs=predict_single_img(img)
+        mask,spineprs,denprs,bgprs=predict_single_img(model,img)
         masks.append(mask)
         spine_prs.append(spineprs)
         den_prs.append(denprs)
+        bg_prs.append(bgprs)
     masks=np.array(masks)
     masks=np.squeeze(masks)    
     spine_prs=np.array(spine_prs)
     spine_prs=np.squeeze(spine_prs) 
     den_prs=np.array(den_prs)
     den_prs=np.squeeze(den_prs) 
-    return masks,spine_prs,den_prs
+    bg_prs=np.array(bg_prs)
+    bg_prs=np.squeeze(bg_prs) 
+    return masks,spine_prs,den_prs,bg_prs
 
 def instance_unetmask_bypeak(spinepr,mask,searchbox,min_radius,spinesize_range=[4,800]):
     #outlayer:softmax
@@ -91,11 +94,16 @@ def instance_unetmask_bypeak(spinepr,mask,searchbox,min_radius,spinesize_range=[
 
 def instance_unetmask_by_border(spinepr,mask,bgpr,th,spinesize_range=[4,800]):
     #outlayer sigmoid
+    minspinesize,maxspinesize=spinesize_range
     mask2=mask & (bgpr<th)
     labels,num=segment.ndilable(mask2,2)
-    spine_label=watershed(-spinepr,labels,mask=mask)
-    minspinesize,maxspinesize=spinesize_range
+    labels=remove_small_objects(labels,minspinesize)
+    
+    spine_label=watershed(-spinepr,labels,mask=mask,connectivity=2)
+    labels2=mask>spine_label
+    labels2,num2=segment.ndilable(labels2,num+1)
+    
     
     spine_label=remove_small_objects(spine_label,min_size=minspinesize)
-    return spine_label
+    return spine_label+labels2
     

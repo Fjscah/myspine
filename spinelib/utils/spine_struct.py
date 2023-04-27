@@ -6,24 +6,26 @@ import skimage
 from pip import main
 from sklearn.preprocessing import binarize
 from scipy.ndimage import generate_binary_structure
+gwdt_enable=False
+try:
+    from gwdt import gwdt
+    gwdt_enable=True
+except Exception as e:
+    from .distance_transform import get_weighted_distance_transform
+    print(e)
 from skimage.transform import rotate
-
+from csbdeep.utils import normalize
+from ..strutensor.hessian import Features2d_H2
 sys.path.append(r".")
 import numpy as np
 from scipy import ndimage
 from skimage.measure import label, regionprops, regionprops_table
 from skimage.morphology import binary_dilation, cube, disk
-
+from .distance_transform import get_weighted_distance_transform
 from .measure import *
 from .npixel import *
 from . import npixel
-gwdt_enable=False
-try:
-    from gwdt import gwdt
-    gwdt_enable=False
-except Exception as e:
-    from .distance_transform import get_weighted_distance_transform
-    print(e)
+import matplotlib.pyplot as plt
 def path_spine_den(labels):
     """
     Args: straight line(vectors) from spine to nearset dendrite
@@ -172,7 +174,7 @@ def _trace_back(distance_transform,p):
         p=minpos
 
     return traces,mask
-def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None):
+def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None,img=None,cropO2=None,rotatesize=15):
     """ 
     tace head+neck trace to cal length, and get head diameter
     headmask neckmask denmask need be binary 01"""
@@ -191,13 +193,20 @@ def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None):
         angle=np.arctan2(centroid[1]-dencord[1],centroid[0]-dencord[0])*180/np.pi
     else:
         return None,None,None
+    if cropO2 is not None:
+        angle2=np.nanmean(cropO2[denmask])*180/np.pi
+        # angle=-90-angle2 if abs(angle2-angle)>90 else angle2+90
+        angle=angle2
     rotatemask=np.array(spinemask,dtype="uint8")*10
+    
+    rotateimg=np.array(img)
     if ndim==3:
         rotatemask=np.swapaxes(rotatemask,0,2)
     # plt.figure()
     # plt.imshow(rotatemask)
     # plt.colorbar()
-    rotatemask=rotate(rotatemask,180-angle,resize=True,preserve_range=True)
+    # rotatemask=rotate(rotatemask,180-angle,resize=True,preserve_range=True)
+    # rotateimg=rotate(img,180-angle,resize=True,preserve_range=True)
     if ndim==3:
         rotatemask=np.swapaxes(rotatemask,0,2)
     rotatemask=rotatemask>4
@@ -206,6 +215,8 @@ def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None):
         mins=np.min(ps,axis=0)
         maxs=np.max(ps,axis=0)
         wids=int((np.max(maxs-mins)+1)/2)
+        if rotatesize is not None:
+            wids=max(wids,rotatesize) 
         mids=np.array((mins+maxs)/2,dtype="int")
     except:
         print(lab,angle,np.max(rotatemask))
@@ -218,9 +229,10 @@ def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None):
     bindbox=[slice(max(mids[i]-wids,0), min(mids[i]+wids,rotatemask.shape[i]))   for i in range(ndim)]
     bindbox=tuple(bindbox)
     rotatemask=rotatemask[bindbox].copy()
-  
+    rotateimg=rotateimg[bindbox].copy()
+    rotatedenk=denmask>0
+    rotatedenk=rotatedenk[bindbox].copy()
     
-
     v=2
     cnts=[len(inds)]
     while(inds):
@@ -247,10 +259,10 @@ def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None):
         attachd_cnt=np.sqrt(head/np.pi)
     head=head*0.7    
     attachd_cnt=attachd_cnt*0.7
-    return length,head,attachd_cnt,rotatemask*lab
+    return length,head,attachd_cnt,rotatemask*lab,rotateimg,rotatedenk
 
 
-def spine_distance(img,labels,lab,searchbox,linemask):
+def spine_distance(wimg,labels,lab,searchbox,linemask,img,O2=None):
     """caculate distance matrix by weighted img and get trace from spine to dendrite skeleton
 
     Args:
@@ -263,7 +275,7 @@ def spine_distance(img,labels,lab,searchbox,linemask):
     Returns:
         _type_: dendrite point while link cartain spine , change linemask
     """
-    structure = generate_binary_structure(img.ndim, 3)
+    structure = generate_binary_structure(wimg.ndim, 3)
     def exclude_crop(v,b):
         if v<0:return 0
         if v>=b:return b-1
@@ -276,15 +288,21 @@ def spine_distance(img,labels,lab,searchbox,linemask):
         exclude_crop(np.max(inds[:,i])+searchbox[i],shape[i])) 
              for i in range(labels.ndim)]
     bindbox=tuple(bindbox)
+    cropwimg=wimg[bindbox].copy()
     cropimg=img[bindbox].copy()
+    if O2 is not None:
+        cropO2=O2[bindbox].copy()
+    else:
+        cropO2=None
     croplable=labels[bindbox]
-    cropimg[croplable==lab]=0
-    import matplotlib.pyplot as plt
+    cropwimg[croplable==lab]=0
+    
     # plt.figure()
     if gwdt_enable:
-        distance_transform=gwdt(cropimg, structure)
+        distance_transform=gwdt(cropwimg, structure)
     else:
-        distance_transform=get_weighted_distance_transform(cropimg)
+        distance_transform=get_weighted_distance_transform(cropwimg)
+    #distance_transform=gwdt(cropwimg, structure)
     # distance_transform=get_weighted_distance_transform(cropimg)
     # plt.imshow(distance_transform)
     # plt.colorbar()
@@ -292,7 +310,7 @@ def spine_distance(img,labels,lab,searchbox,linemask):
     labdis=distance_transform*(croplable==1)
     if not labdis.any():
         #print("find no dendrite")
-        return (centroid,None),None,None,None,None
+        return (centroid,None),None,None,None,None,None,None
     inds=np.argwhere(labdis>0)
     minind=None
     minv=np.inf
@@ -303,14 +321,15 @@ def spine_distance(img,labels,lab,searchbox,linemask):
             minv=labdis[index]
     
     trace,maskcrop=_trace_back(distance_transform,minind)
-    #print(trace)
-    linemask[bindbox][maskcrop>0]=lab#maskcrop[maskcrop>0]
+    # print(trace)
+    linemask[bindbox][maskcrop>0]=lab # maskcrop[maskcrop>0]
     dencord=[minind[i]+bindbox[i].start for i in range(labels.ndim) ]
-    length,headlength,attachd_cnt,rotatemask=_trace_length(croplable==lab,maskcrop,cropdenmask,centroid,dencord,lab)
+    length,headlength,attachd_cnt,rotatemask,rotateimg,rotatedenk=_trace_length(croplable==lab,maskcrop,cropdenmask,centroid,
+                                                                     dencord,lab,cropimg,cropO2,rotatesize=15)
     
-    return (centroid,dencord),length,headlength,attachd_cnt,rotatemask
+    return (centroid,dencord),length,headlength,attachd_cnt,rotatemask,rotateimg,rotatedenk
 
-def spines_distance(img,labels,searchbox=[10,20,20]):
+def spines_distance(img,labels,searchbox=[10,20,20],imgweight=1,disweight=1,useO2=False):
     """caculate distance matrix by weighted img and get trace from spine to dendrite skeleton
 
     Args:
@@ -322,17 +341,25 @@ def spines_distance(img,labels,searchbox=[10,20,20]):
     Returns:
         _type_: dendrite point while link cartain spine , change linemask
     """
-    weightimg=1+(np.max(img)-img)/100
-    weightimg=np.array(weightimg*weightimg,dtype="uint16")
-    labs=set(np.unique(labels))
-    if 0 in labs: labs.remove(0) #bg
-    if 1 in labs: labs.remove(1)#den
+    if useO2:
+        S2, O2,R2=Features2d_H2(img)
+    else:
+        O2=None
+    imgt=normalize(img)
+    weightimg=(np.max(imgt)-imgt)
+    weightimg=weightimg*imgweight
+    weightimg=np.exp(weightimg)*disweight
     
-    linemask=np.zeros_like(img)
+  
+    labs=set(np.unique(labels))
+    if 0 in labs: labs.remove(0) # bg
+    if 1 in labs: labs.remove(1) # den
+    
+    linemask=np.zeros_like(img,dtype="int16")
     corddict={}
     for lab in labs:
-        cord,length,headlength,attachd_cnt,rotamask=spine_distance(weightimg,labels,lab,searchbox,linemask)
-        corddict[lab]=[cord,length,headlength,attachd_cnt,rotamask]
+        cord,length,headlength,attachd_cnt,rotamask,rotaimg,rotaden=spine_distance(weightimg,labels,lab,searchbox,linemask,img,O2)
+        corddict[lab]=[cord,length,headlength,attachd_cnt,rotamask,rotaimg,rotaden]
     return corddict,linemask
     
 

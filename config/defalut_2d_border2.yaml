@@ -1,6 +1,6 @@
 
 Path:
-  Train_path: ../myspine-dataset/2D-morph-seg/ # dataset root folder
+  Train_path: ../myspine-dataset/2D-morph-border/ # dataset root folder
 
   oridata_path: "" #  defalt  Train_path/img    stroe large img eg 512*512
   orilabel_path: "" # defalt  Train_path/label  stroe label for img eg 512*512
@@ -8,15 +8,16 @@ Path:
   data_path: "" #  defalt Train_path/imgcrop    store small img eg 128*125
   label_path: "" # defalt  Train_path/labelcrop will crop from whole img , eg from 512 to 256,128 , see input size
 
-  log_path: "DATA/log/2Dtorchunet3/seg/"  #  defalt  Train_path/log error tensorboard score log dir,configure dir/log path
-  model_path : "DATA/model/2Dtorchunet3/seg" ##  defalt  Train_path/model, configure dir/model path
-  model_save_path: "DATA/model/2Dtorchune3/seg/best.ckpt" # no use
+  log_path: "DATA/log/2Dtorchunet2pp-b/seg/"  #  defalt  Train_path/log error tensorboard score log dir
+  model_path : "DATA/model/2Dtorchunet2pp-b/seg" ##  defalt  Train_path/model
+  model_save_path: "DATA/model/2Dtorchunet2pp-b/seg/best.ckpt" # no use
   
 
-  save_suffix: "-seg" # -border todo : -den -spine
+  save_suffix: "-border" # -border todo : -den -spine
   label_suffix: "-seg"
 
   filetype: ".tif"
+
 Data:
   axes: 'yx' # change to zyx ,todo
   z_factor: 2.0 # z spacing / x spancing ,x spacing=y spacing,todo
@@ -24,7 +25,7 @@ Data:
   input_sizexy: 256   # 256*256,Input feature width/height,for crop generate img data
   num_classes: 3 # include zero background
   inputchannel: 1 # 1: grayscale,todo
-  partion : [0.9,0.1,0.0] # train,valid,test+=1
+  partion : [0.8,0.2,0.0]  # train,valid,test+=1
   c_val : "auto" # background value
 
  
@@ -60,6 +61,6 @@ Network:
   reg_factor: 0.0
   mixed_precision: True
   use_shallow_network: True
-  layer_num: 3 
-  out_layer: "softmax" #softmax ,sigmoid
+  layer_num: 2 
+  out_layer: "sigmoid" #softmax ,sigmoid
 

@@ -6,6 +6,9 @@ from .file_base import create_dir,split_filename
 class YAMLConfig:
     def __init__(self, path):
         if not path: return
+        dirpath,shorname,suffix=split_filename(path)
+        self.config_path=os.path.abspath(dirpath)
+        print("configure file path",self.config_path)
         with open(str(path), 'r') as f:
             self.config = yaml.safe_load(f)
         self.init_default()
@@ -14,9 +17,13 @@ class YAMLConfig:
         cong=self.config
         
         trainroot= self.get_entry(['Path', 'Train_path']) 
-        print("relative rootdir",":\t",trainroot)
-        trainroot=os.path.abspath(trainroot)
-        print("absolute rootdir",":\t",trainroot)
+        isabs=os.path.isabs(trainroot)
+        if isabs:
+            print("absolute rootdir",":\t",trainroot)
+        else:    
+            print("relative rootdir",":\t",trainroot)
+            trainroot=os.path.join(self.config_path,trainroot)
+            print("absolute rootdir",":\t",trainroot)
         self.set_entry(['Path', 'Train_path'],trainroot,overlap=True,isdir=True)
         
         self.set_entry(['Path', 'label_path'],os.path.join(trainroot,"labelcrop"),isdir=True)
@@ -25,7 +32,16 @@ class YAMLConfig:
         self.set_entry(['Path', 'oridata_path'],os.path.join(trainroot,"img"),isdir=True)
         self.set_entry(['Path', 'log_path'],os.path.join(trainroot,"log"),isdir=True)
         self.set_entry(['Path', 'model_path'],os.path.join(trainroot,"model"),isdir=True)
-                
+        
+    def get_abs_path(self,path):
+        if not path: return path
+        isabs=os.path.isabs(path)
+        if isabs:
+            return path
+            
+        else:    
+            return os.path.join(self.config_path,path)
+             
     def set_entry(self,entry_path,value,overlap=False,isdir=False):
         temp_value = self.config
         for key in entry_path[:-1]:

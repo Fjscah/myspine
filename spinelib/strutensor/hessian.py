@@ -246,67 +246,7 @@ def get_det_trace_2D(S):
     return detarr,tracearr
 
 
-"""
-============================================
-Estimate anisotropy in a 3D microscopy image
-============================================
 
-In this tutorial, we compute the structure tensor of a 3D image.
-For a general introduction to 3D image processing, please refer to
-:ref:`sphx_glr_auto_examples_applications_plot_3d_image_processing.py`.
-The d2 we use here are imaged from an image of kidney tissue obtained by
-confocal fluorescence microscopy (more details at [1]_ under
-``kidney-tissue-fluorescence.tif``).
-
-.. [1] https://gitlab.com/scikit-image/d2/#d2
-
-"""
-# def StructureEvi(image,step=2,sigma=None,mode='constant', cval=0,method="hessian"):
-#     """cauculate eigenvalue for image 's structure or hessian matrix ,to get three orthoganal lambda
-
-#     Args:
-#         image (ndarray): z,y,z
-#         step (int, optional): when caculate structure , it need caculate gradient,use spaceing step to caculate,if set hessian , not used. Defaults to 2.
-#         sigma (None,list of ndim, optional): gaussian filter params, None default set 1. Defaults to None.
-#         mode (str, optional): _description_. Defaults to 'constant'.
-#         cval (int, optional): _description_. Defaults to 0.
-#         method (str, optional): hessian/structure. Defaults to "hessian".
-
-#     Returns:
-#         eigen,stick: stick describe the ballness property
-#     """
-
-#     #print(f'number of dimensions: {image.ndim}')
-#     #print(f'shape: {image.shape}')
-#     #print(f'dtype: {image.dtype}')
-#     if sigma is None: 
-#         sigma = tuple([1 for i in range(image.ndim)])
-#     image = feature.corner._prepare_grayscale_input_nD(image)
-#     if method=="hessian":
-#         Ii= HessianEle(image, sigma=sigma)
-#     else:
-#         Ii=StructureTensorEle(image,step=step,sigma=None)
-    
-#     A_elems = [filters.gaussian(der0 * der1, sigma,mode=mode, cval=cval)
-#                for der0, der1 in combinations_with_replacement(Ii, 2)]   
-     
-#     #A_elems = feature.structure_tensor(image, sigma=sigma)
-#     #traceA= A_elems[0]+A_elems[3]+A_elems[5]
-
-
-#     eigen = feature.structure_tensor_eigenvalues(A_elems)
-#     #print(eigen[0].shape,image.shape,type(image))
-#     # if len(eigen==2):
-#     #     stick=eigen[1]*eigen[1]/(eigen[0]-eigen[1]+0.05)
-#     # else:
-#     #     stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
-#     if len(eigen==2):
-#         stick=eigen[1]/(eigen[0]+0.005)
-#     else:
-#         stick=eigen[2]*eigen[2]/(eigen[0]+0.005)/(eigen[1]+0.005)
-#     #stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
-#     #stick2=(eigen[1]-eigen[2])/(eigen[2]+0.001)
-#     return eigen,stick
 
 def StructureEvi(image,step=2,sigma=None,mode='constant', cval=0,method="hessian"):
     """cauculate eigenvalue for image 's structure or hessian matrix ,to get three orthoganal lambda
@@ -392,12 +332,35 @@ def HessianEle_2D(arr,sigma=0):
         sigma (double): parament for gaussian, =0 no excute gaussian
     retun :  Ixx,Ixy,Iyy
     """
-    Ix,Iy=StructureTensorEle(arr,sigma)
+    # Ix,Iy=StructureTensorEle(arr,sigma)
+    Ix = np.gradient(arr, axis=0)
+    Iy = np.gradient(arr, axis=1)
     Ixx=np.gradient(Ix,axis=0)
     Iyy=np.gradient(Iy,axis=1)
     Ixy=np.gradient(Iy,axis=0)
     return Ixx,Ixy,Iyy
+def Features2d_H2(I, sigma=0):
+    """ stickness and orientation based on 2d Hesssian^2
+    :return: S2 - saliency, O2 - tangent of max-amp-eigvec
+    """
+    # hessian 2d
+    Hxx, Hxy, Hyy = HessianEle_2D(I, sigma)
+    # hessian*hessian
+    H2xx = Hxx*Hxx + Hxy*Hxy
+    H2xy = (Hxx+Hyy)*Hxy
+    H2yy = Hyy*Hyy + Hxy*Hxy
 
+    # eigenvalues: l2+, l2-
+    # eigenvectors: e2+, e2-
+    # mask: select edge-like where l- > |l+|
+    mask_tr = (Hxx+Hyy) < 0
+    # saliency: l2+ - l2- = l+^2 - l-^2
+    S2 = mask_tr*np.sqrt((H2xx-H2yy)**2 + 4*H2xy**2)
+    R2 = mask_tr*np.abs(H2xx+H2yy-S2)
+    # orientation: e2+ (normal) -> pi/2 rotation (tangent) -> e2-
+    O2 = mask_tr*0.5*np.angle(-H2xx+H2yy-2j*H2xy)#(-0.5*pi, 0.5*pi]
+    O2[mask_tr]=np.nan
+    return S2, O2,R2
 # here put the code
 def HessianEle_3D(arr,sigma=0):
     """return Ixx,Iyy,Ixy gauss filter based on sigma, two order

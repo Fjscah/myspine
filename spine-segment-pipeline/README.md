@@ -93,7 +93,7 @@ If there are any error spots, choose them and click `to spine` or `to den` to re
 
 1. run napari (enter "napari" in console)- click: plugins → spine-segment-pipeline-label → predict widget
 
-2. choose and load a model file to `predict` dendrite\spine probability maps and get semantic segmentation
+2. choose and load a model file (.pt format) to `predict` dendrite\spine probability maps and get semantic segmentation
 
 3. if you think semantic segmentation is not correct, you can correct this mask result in `mask threshold` step.
 
@@ -129,4 +129,5 @@ If there are any error spots, choose them and click `to spine` or `to den` to re
 
 # GUI screenshot
 
-![1666879731179|300x400](image/README/1666879731179.png "spine-segment-pipeline-label widget")
+![1666879731179|300x400](image/README/GUI_label.png "spine-segment-pipeline-label widget")
+![1666879731179|300x400](image/README/GUI_Predict.png "spine-segment-pipeline-predict widget")
