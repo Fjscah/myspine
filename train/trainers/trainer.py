@@ -21,7 +21,7 @@ import scipy.signal
 import os
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+
 from torchvision import datasets, transforms
 from tqdm import tqdm
 import torch.optim as optim 
@@ -32,7 +32,7 @@ from utils import file_base
 
 from .metrics import  iou_score,miou_weight
 from keras.metrics import categorical_accuracy
-from ..dataset.dataloader import DataLoader, CustomDatasetUnet2D,augtransform,get_train_tranform
+from ..dataset.dataloader import CustomDatasetUnet2D,augtransform,get_train_tranform
 
 from .metrics import AverageMeter
 from .device import show_cpu_gpu,set_use_gpu
@@ -42,6 +42,8 @@ from utils.yaml_config import YAMLConfig
 from utils.basic_wrap import timing
 from .loss import *
 from torchsummary import summary
+from spinelib.seg import unetseg
+from .metrics import matching,matching_dataset,print_matching_maps
 # from torchinfo import summary
 matplotlib.use('Agg')
 
@@ -57,6 +59,7 @@ optimizer_dict = {
 loss_dict={
     "FocalLoss":FocalLoss("multiclass",2),
     "b_cross_entropy": nn.BCELoss(),
+    "Dis_loss": Dis_loss(FocalLoss("multiclass",2),ReconstructionLoss("l3")),
 }
 
 
@@ -104,6 +107,7 @@ class LossHistory:
         pltflag=pltflag or (epoch%50==49) &(epoch>0)
         if pltflag:
             self.loss_plot()
+       
        
 
     def loss_plot(self):
@@ -260,10 +264,11 @@ class Trainer:
             lossmode="multiclass"
             
         # self.loss = nn.BCEWithLogitsLoss()
-        
         self.loss=loss_dict[self.loss_type].to(self.device)
+        if self.loss_type=="Dis_loss":
+            self.loss.num_class=self.num_classes
         # self.cls_weight
-       
+   
         # #------------------------------------------------------------------#
         # dice_loss = False
         # #------------------------------------------------------------------#
@@ -281,18 +286,20 @@ class Trainer:
         create_dir(self.model_path)
         network_type = self.configuration.get_entry(['Network', 'modelname'])
         num_classes=self.num_classes
-        if "unet3d" == network_type:
-            self.model = unet.UNet3D(self.configuration)
-        elif "unet2d" == network_type:
-            self.model =UNet2d(num_classes,1)
+        add_num=0
+        if "dis" in self.save_suffix:
+            add_num=1
+        if "unet2d" == network_type:
+            self.model =UNet2d(num_classes+add_num,1)
         elif "unet++"==network_type:
-            self.model=NestedUNet(num_classes,1)
+            self.model=NestedUNet(num_classes+add_num,1)
+        
         self.model.load_network_set(self.network_info)
         self.model.to(self.device)
         
         summary(self.model,(1,self.input_sizexy,self.input_sizexy))
     def initial_metric(self):
-        self.metric=miou_weight([0])    
+        self.metric=miou_weight([0],mode=self.out_layer)    
             
     def load_weight(self,denovo,premodel):
         #-----------------------#
@@ -330,7 +337,7 @@ class Trainer:
                   'iou': AverageMeter()}
         model.train()
         pbar = tqdm(total=len(train_dataloader),desc="train",bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')
-        for image, label in train_dataloader:
+        for image,ins, label in train_dataloader:
                 # 将模型的参数梯度初始化为0
             # img,lab=batch
             model.train()
@@ -359,7 +366,7 @@ class Trainer:
         return OrderedDict([('loss', avg_meters['loss'].avg),
                         ('iou', avg_meters['iou'].avg)])
     
-    def valid_epoch(self,valid_dataloader,model,lossfunc,metricfunc):
+    def valid_epoch(self,valid_dataloader,model,lossfunc,metricfunc,num_classes):
         avg_meters = {'loss': AverageMeter(),
                   'iou': AverageMeter()}
 
@@ -368,7 +375,7 @@ class Trainer:
         with torch.no_grad():
             pbar = tqdm(total=len(valid_dataloader),desc="valid",bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')
             
-            for image, label in valid_dataloader:
+            for image,ins, label in valid_dataloader:
                 image = image.to(self.device)
                 label = label.to(self.device)
 
@@ -376,7 +383,7 @@ class Trainer:
 
                 output = model(image)
                 loss = lossfunc(output, label)
-                iou = metricfunc(output, label)
+                iou = metricfunc(output[:,:num_classes], label[:,:num_classes])
 
                 avg_meters['loss'].update(loss.item(), image.size(0))
                 avg_meters['iou'].update(iou, image.size(0))
@@ -392,6 +399,37 @@ class Trainer:
 
         return OrderedDict([('loss', avg_meters['loss'].avg),
                             ('iou', avg_meters['iou'].avg)])
+    
+    def metric_epoch(self,valid_dataloader,model,lossfunc,metricfunc,epoch):
+        
+        model.eval()
+        ins_s=[]
+        label_s=[]
+        if epoch%10==0:
+           # print("Caculating mAP.....")
+            i=5
+            for images, inss,labels in valid_dataloader:
+                i-=1
+                for img,ins,label in zip(images,inss,labels):
+                    # image = image.to(self.device)
+                    # model.predict_2d_img(image)
+                    img=img.squeeze()
+                    if "dis" in self.save_suffix:
+                        
+                        spine_label=unetseg.instance_unetmask_by_dis(model,img,th=0.15,spinesize_range=[4,800])
+                    else:
+                        mask,spinepr,denpr,bgpr=unetseg.predict_single_img(model,img)
+                        if model.out_layer=="sigmoid":
+                            spine_label=unetseg.instance_unetmask_by_border(spinepr,mask==2,bgpr=bgpr,th=0.009,spinesize_range=[4,800])
+                        else:
+                            spine_label=unetseg.instance_unetmask_bypeak(spinepr,mask,searchbox=[15,15],min_radius=5,spinesize_range=[4,800])
+                    #m=matching(ins,spine_label,[0.5,0.6,0.8])
+                    ins[ins<2]=0
+                    ins_s.append(ins.squeeze().cpu().detach().numpy())
+                    label_s.append(spine_label)
+                if not i: break
+            m=matching_dataset(ins_s,label_s,[0.4,0.5,0.6,0.7,0.8])
+            print_matching_maps(m)
     
     @logit("error.log")
     def train(self, denovo=False,premodel=""):
@@ -420,8 +458,16 @@ class Trainer:
         t1=time.time()
         train_trainform=get_train_tranform()
         self.enhance_border=True if "border" in self.save_suffix else False
-        train_datast=CustomDatasetUnet2D(Train_path + "\\train",suffix,num_classes,transform=train_trainform,iteration=epoch_iterration,des="train",enhance_border=self.enhance_border)
-        valid_datast=CustomDatasetUnet2D(Train_path + "\\valid",suffix,num_classes,iteration=epoch_iterration,des="valid",enhance_border=self.enhance_border)
+        self.make_dis=True if "dis" in self.save_suffix else False
+        train_datast=CustomDatasetUnet2D(Train_path + "\\train",suffix,num_classes,transform=train_trainform,
+                                         iteration=epoch_iterration,des="train",
+                                         enhance_border=self.enhance_border,
+                                         make_dis=self.make_dis,
+                                         )
+        valid_datast=CustomDatasetUnet2D(Train_path + "\\valid",suffix,num_classes,iteration=epoch_iterration,des="valid",
+                                         enhance_border=self.enhance_border,
+                                         make_dis=self.make_dis,
+                                         )
         
         # dalaloader size equal to train_dataloader.__len__ and return data wich has been packaged with batch_size
         train_dataloader = DataLoader(train_datast,batch_size = batch_size,shuffle=True)
@@ -465,13 +511,13 @@ class Trainer:
         #   Train  #
         #-----------------------#
         create_dir(os.path.join(self.model_path ,"checkpoint"))
-        val_log=self.valid_epoch(valid_dataloader,model,lossfunc,metric)
+        val_log=self.valid_epoch(valid_dataloader,model,lossfunc,metric,num_classes)
         # best_iou = val_log['iou']
         bestpath=os.path.join(self.model_path ,"checkpoint","best.pt")
         savemodel(self.model,bestpath,torch.zeros(1,1,self.input_sizexy,self.input_sizexy).to(self.device))
         best_iou = val_log['iou']
         print("=> saved inital best model",bestpath)
-        print("baest loss",val_log['loss'],"best_iou",best_iou)
+        print("best loss",val_log['loss'],"best_iou",best_iou)
         for epoch in range(self.epochs):
             if self.use_gpu:
                 gpu_use_info=f", {torch.cuda.get_device_name(0)} Memory Usage : Allocated-{round(torch.cuda.memory_allocated(0)/1024**3,1)} GB , Cached-{round(torch.cuda.memory_reserved(0)/1024**3,1)} GB"
@@ -482,13 +528,13 @@ class Trainer:
             # num_iters = 0
             # epoch_loss_1 = 0.0
             train_log=self.train_epoch(train_dataloader,model,lossfunc,metric,optimizer)
-            val_log=self.valid_epoch(valid_dataloader,model,lossfunc,metric)
-            
+            val_log=self.valid_epoch(valid_dataloader,model,lossfunc,metric,num_classes)
+            self.metric_epoch(valid_dataloader,model,lossfunc,metric,epoch)
             history.on_epoch_end(epoch,train_log=train_log,val_log=val_log,pltflag=epoch+1)
             scheduler.step()
 
-            print('loss %.4f - iou %.4f - val_loss %.4f - val_iou %.4f'
-              % (train_log['loss'], train_log['iou'], val_log['loss'], val_log['iou']))
+            # print('loss %.4f - iou %.4f - val_loss %.4f - val_iou %.4f'
+            #   % (train_log['loss'], train_log['iou'], val_log['loss'], val_log['iou']))
 
             log['epoch'].append(epoch)
             log['lr'].append(scheduler.get_last_lr()[0])

@@ -15,15 +15,14 @@ from skimage.io import imread
 # sys.path.append("../../../")
 
 from .device import set_use_gpu
-from ..dataset.dataloader import get_train_tranform,OrigionDatasetUnet2D
+from ..dataset.dataloader import get_train_tranform,OrigionDatasetUnet2D,CustomDatasetUnet2D
 import numpy as np
 from ..networks import unetplusplus
 import matplotlib.pyplot as plt
 # import napari
 num_classes=3
 from glob import glob
-from matplotlib.widgets import MultiCursor
-
+from spinelib.seg import unetseg
 from utils.file_base import file_list
 import colorsys
 # from PIL import Image
@@ -34,13 +33,21 @@ import os
 from torch.utils.data import DataLoader
 import torch
 from utils import file_base
+import colorcet as cc
+from matplotlib.widgets import MultiCursor
+from matplotlib.colors import LinearSegmentedColormap
 # from torchsummary import summary
 def showims(*ims):
     fig,axes=plt.subplots(1,len(ims),sharex=True,sharey=True)
     # print(im1.shape)
     for i,im in enumerate(ims):
         #print(im.shape)
-        axes[i].imshow(im,interpolation='none')
+        np.dtype
+        if  "int" in im.dtype.__repr__() and len(np.unique(im))<500:
+            cmap=LinearSegmentedColormap.from_list("isolum",cc.glasbey)
+            axes[i].imshow(im,interpolation='none',cmap=cmap)
+        else:
+            axes[i].imshow(im,interpolation='none')
     # axes[1].imshow(im2,interpolation='none')
     # axes[2].imshow(im3,interpolation='none')
     multi = MultiCursor(fig.canvas, axes, color='r', lw=1, horizOn=True, vertOn=True)
@@ -102,13 +109,16 @@ class Predict():
     def inital_model(self):
         
         network_type = self.configuration.get_entry(['Network', 'modelname'])
+        network_type = self.configuration.get_entry(['Network', 'modelname'])
         num_classes=self.num_classes
-        if "unet3d" == network_type:
-            self.model = unet.UNet3D(self.configuration)
-        elif "unet2d" == network_type:
-            self.model =unetplusplus.UNet2d(num_classes,1)
+        add_num=0
+        if "dis" in self.save_suffix:
+            add_num=1
+        if "unet2d" == network_type:
+            self.model =unetplusplus.UNet2d(num_classes+add_num,1)
         elif "unet++"==network_type:
-            self.model=unetplusplus.NestedUNet(num_classes,1)
+            self.model=unetplusplus.NestedUNet(num_classes+add_num,1)
+        
         self.model.load_network_set(self.network_info)
         self.model.to(self.device)
         #summary(self.model,(1,self.input_sizexy,self.input_sizexy))
@@ -125,13 +135,13 @@ class Predict():
             for image, label in valid_dataloader:
                 image = image.to(self.device)
                 label = label.to(self.device)
-
+                image=image.squeeze()
                 # compute output
                 # self.model.predict_2d_img(image)
-
-                output = model(image)[0]#.cpu().data.numpy()
+                mask,spineprs,denprs,bgprs=unetseg.predict_single_img(self.model,image)
+                #output = model(image)[0]#.cpu().data.numpy()
                 #print(image.shape)
-                showims(image.squeeze(),label[0],output[0],output[1],output[2])
+                showims(image.squeeze(),label[0,0],bgprs,denprs,spineprs,mask)
 
 
 
@@ -153,7 +163,7 @@ class Predict():
         #  config load  #
         #-----------------------#
         Train_path=self.Train_path
-        suffix=self.label_suffix # seg,spine,den
+        suffix=self.save_suffix # seg,spine,den
         num_classes=self.num_classes
         log_dir=self.log_path
         model=self.model
@@ -193,8 +203,20 @@ class Predict():
                 showims(img,ypred[0],ypred[1],ypred[2])
         else: # filename
             img=imread(data).astype("float32")
+            
             ypred=model.predict_2d_img(img)
-            showims(img,ypred[0],ypred[1],ypred[2])
+            from spinelib.seg import unetseg
+            if "dis" in self.save_suffix:
+                
+                spine_label=unetseg.instance_unetmask_by_dis(model,img,th=0.15,spinesize_range=[4,800])
+            else:
+                mask,spinepr,denpr,bgpr=unetseg.predict_single_img(model,img)
+                if model.out_layer=="sigmoid":
+                    spine_label=unetseg.instance_unetmask_by_border(spinepr,mask==2,bgpr=bgpr,th=0.009,spinesize_range=[4,800])
+                else:
+                    spine_label=unetseg.instance_unetmask_bypeak(spinepr,mask,searchbox=[15,15],min_radius=5,spinesize_range=[4,800])
+            
+            showims(img,ypred[0],ypred[1],ypred[2],spine_label)
             
         
 def showtwo(im1,im2):

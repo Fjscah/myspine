@@ -21,16 +21,16 @@ from train.trainers.predict import Predict
 import os
 #%% set predict mode: sigle image or multi images(dir)
 predictmode="single" # multi , sigle image or multi images(dir)
-configfile=r"config\defalut_2d_seg.yaml"
+configfile=r"config\defalut_2d_seg_sim.yaml"
 test_flag=True  #False, wheather to use test folder ( load test label together)
 
 # if premodel not specify will search from yaml profile
 premodel=""#r"../test-dataset/model/2Dtorchunet-b/seg\ep003-loss0.415.pth"
 # if datas not specify will load test data folder ,datas supprt imgfile,imgfiles,imgdolder
-datas=r"myspine-dataset\crimson-20200319-1.tif"
-datas=None
 datas=r"myspine-dataset/2D-morph-seg/img/"
 datas=[r"myspine-dataset/2D-morph-seg/img/",r"myspine-dataset/2D-morph-seg/label/","-seg"]
+datas=r"myspine-dataset\crimson-20200319-1.tif"
+datas=None
 # print(os.path.isdir(datas))
 if configfile is not None:
     default_configuration=YAMLConfig(

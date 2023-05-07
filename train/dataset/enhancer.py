@@ -28,12 +28,15 @@ import numpy as np
 from sympy import im
 import imgaug.augmenters as iaa
 import imgaug as ia
+from .distance_transorm import make_label_distance_ske,make_label_distance_edt,get_joint_border2,make_label_distance_norm
+from imgaug.augmentables.heatmaps import HeatmapsOnImage
 # Standard scenario: You have N=16 RGB-images and additionally one segmentation
 # map per image. You want to augment each image and its heatmaps identically.
 import matplotlib.pyplot as plt
 from .segment import fill_hulls,resortseg
 from . import dataloader 
 from utils.yaml_config import YAMLConfig
+from utils.file_base import create_dir,split_filename
 from .localthreshold import local_threshold
 from skimage.filters.thresholding import (threshold_isodata, threshold_li,
                                           threshold_mean, threshold_minimum,
@@ -64,14 +67,13 @@ def savepr(arr,filename):
 #  custom Transform online   #
 #-----------------------#
 
-
-np.random.choice(6,5,False)
 #-----------------------#
 #  custom Transform offline   #
 #-----------------------#
 def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
     images=[]
     segmaps=[]
+    heatmaps=[]
     #print(imdir,"\n",ladir,imfiles,lafiles,pairs)
     if len(pairs)==0:
         print("empty imgs, please check")
@@ -88,10 +90,21 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
             lab=dataloader.load_img(labelf)
         # print(im.shape)
         lab=lab.astype(np.uint16)
+        orilab=lab.copy()[...,None]
+        if "dis" in savetype:
+            labfolder,shortname,suffix=split_filename(labelf)
+            diss=make_label_distance_norm(lab,1)[..., np.newaxis]
+            create_dir(os.path.join(labfolder,"dis"))
+            merge_diss=np.concatenate([lab[..., np.newaxis],diss],axis=-1)
+            merge_diss=merge_diss.transpose([2,0,1])
+            savepr(merge_diss,os.path.join(labfolder,"dis",shortname+"-dis.tif"))
         if 'border' in savetype:
+            labfolder,shortname,suffix=split_filename(labelf)
             border=get_joint_border2(lab,2)
             lab[lab>1]=2
             lab[border]=3
+            create_dir(os.path.join(labfolder,"border"))
+            savelabel(lab,os.path.join(labfolder,"border",shortname+"-border.tif"))
         elif "spine" not in savetype:
             lab[lab>1]=2
         
@@ -113,6 +126,8 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
         else:
             im=im[..., np.newaxis]
             lab=lab[..., np.newaxis]
+            lab=np.concatenate([orilab,lab],axis=-1)
+        
         # plt.imshow(lab)
         # plt.show()
         #show_two(im,lab)
@@ -120,6 +135,10 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
         #im = normalize(im,1,99.8,axis=None)
         images.append(im)
         segmaps.append(lab)
+        if "dis" in savetype:
+            
+            #diss_h=HeatmapsOnImage(diss,shape=diss.shape,min_value=-1,max_value=1)
+            heatmaps.append(diss)
     # if hull:
     #     hulldir="hulldir"
     #     hulldir=os.path.join(file_base.get_parent_dir(imdir,1),hulldir)
@@ -132,8 +151,8 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
             
     if cval is None:
         # threshold_li()
-        vmean=np.nanmean([np.nanmean(im[lab==0]) for im,lab in zip(images,segmaps)])
-        vstd=np.nanmean([np.nanstd(im[lab==0]) for im,lab in zip(images,segmaps)])
+        vmean=np.nanmean([np.nanmean(im[lab[...,:1]==0]) for im,lab in zip(images,segmaps)])
+        vstd=np.nanmean([np.nanstd(im[lab[...,:1]==0]) for im,lab in zip(images,segmaps)])
         print(vmean,vstd)
         cval=(int(max(0,vmean-vstd)),int(vmean+vstd))
         
@@ -175,26 +194,46 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
     N=len(images)
     cnt0=0
     for it in range(iter):
-        images_aug, segmaps_aug = seq(images=images, segmentation_maps=segmaps)
-        for n,(im1,im2) in enumerate(zip(images_aug,segmaps_aug)):
-            
-            oim=os.path.join(imodir,str(it*N+n)+".tif")
-            ola=os.path.join(laodir,str(it*N+n)+savetype+".tif")
-            if depth>1:
-                im1=im1.swapaxes(0,2)
-                im2=im2.swapaxes(0,2)
-            else:
+        if "dis" in savetype:
+            images_aug, segmaps_aug,heatmaps_sug = seq(images=images, segmentation_maps=segmaps,heatmaps=heatmaps)
+            for n,(im1,im2,im3) in enumerate(zip(images_aug,segmaps_aug,heatmaps_sug)):
+                
+                oim=os.path.join(imodir,str(it*N+n)+".tif")
+                ola=os.path.join(laodir,str(it*N+n)+savetype+".tif")
+
                 #show_two(im1,im2)
                 im1=np.squeeze(im1)
-                im2=np.squeeze(im2)
-            # imsave(oim,im1)
-            savepr(im1,oim)
-            savelabel(im2,ola)
-            cnt0+=1
+                im2=np.transpose(im2,[2,0,1])
+                im3=np.squeeze(im3)[None,...]
+                # imsave(oim,im1)
+                savepr(im1,oim)
+                # print(np.min(im3))
+                #print(im2.shape,im3.shape)
+                im4=np.concatenate([im2,im3],axis=0,dtype="float32")
+                savepr(im4,ola)
+                cnt0+=1
+        
+        else:
+            images_aug, segmaps_aug = seq(images=images, segmentation_maps=segmaps)
+            for n,(im1,im2) in enumerate(zip(images_aug,segmaps_aug)):
+                
+                oim=os.path.join(imodir,str(it*N+n)+".tif")
+                ola=os.path.join(laodir,str(it*N+n)+savetype+".tif")
+                if depth>1:
+                    im1=im1.swapaxes(0,2)
+                    im2=im2.swapaxes(0,2)
+                else:
+                    #show_two(im1,im2)
+                    im1=np.squeeze(im1)
+                    im2=np.transpose(im2,[2,0,1])
+                # imsave(oim,im1)
+                savepr(im1,oim)
+                savelabel(im2,ola)
+                cnt0+=1
     # print("save crop num",cnt0)
     return cnt0
 
-def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=True,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
+def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=False,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
     """from pdir,load img and label,then crop or tanseform to generate more img and save in odir
 
     Args:
@@ -223,9 +262,9 @@ def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=Tru
     file_base.create_dir(imodir)
     file_base.create_dir(laodir)
     pairs=file_base.pair_files(imfiles,lafiles,note)
-    generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=True,depth=1,iter=50,cval=None,denmode=False,savetype="seg")
+    generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=hull,depth=depth,iter=iter,cval=cval,denmode=denmode,savetype=savetype)
 
-def generte_crop_img_save_split(imdir,ladir,imodir,laodir,outsize,note="seg",hull=True,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
+def generte_crop_img_save_split(imdir,ladir,imodir,laodir,outsize,note="seg",hull=False,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
     """generate crop data for train, valid , test directly 
 
     Args:
@@ -257,17 +296,7 @@ def get_joint_border(label,ignore=[]):#bug
     spine_label_c[spine_label_c>(label>max(ignore))]=0    
     
     return    spine_label_c>0
-def get_joint_border2(label,beginlabel=2):
-    label=label.copy()
-    label[label<beginlabel]=0
-    mask=label>0
-    labs=np.unique(label)
-    footprint=np.ones((3,) * label.ndim, dtype=np.int8)
-    border1=maximum_filter(label,footprint=footprint)>label
-    label[label==0]=np.max(label)+1
-    border2=minimum_filter(label,footprint=footprint)<label
-    border=(border1 |border2) & mask
-    return border
+
 # def _preprocess_mask(self,mask,enhance_border=False):
 #         """process mask to  ytrue for train,
 #         1. trans to support dtype

@@ -13,7 +13,7 @@ import numpy as np
 #-----------------------#
 # ===== Parameter ======#
 #-----------------------# 
-configfile=r"config\defalut_2d_border.yaml"
+configfile=r"config\defalut_2d_seg_sim.yaml"
 
 get_seg_tif_flag=False
 crop_tif_flag   =True

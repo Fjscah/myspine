@@ -12,19 +12,25 @@ __all__ = ['UNet2d', 'NestedUNet']
         
 class BaseModel(nn.Module):
     def predict_2d_img(self,image):
-        image=image.astype("float32")
-        im=ToTensor()(image)#C H W
+        image=image.astype("float32") # H W,[C]
+        im=ToTensor()(image) # C H W
         # im=im.expand(1,256,256,1)
+        im=im.to(self.cur_device)
         im=im.unsqueeze(1)
         ypred=self.forward(im)
-        return ypred[0].detach().numpy()   
+        return ypred[0].cpu().detach().numpy()   
     def load_network_set(self,nextconfig):
         self.layer_num=nextconfig['layer_num']
-        out_layer=nextconfig['out_layer']
-        if "sigmoid"==out_layer:
+        self.out_layer=nextconfig['out_layer']
+        if "sigmoid"==self.out_layer:
             self.out=torch.nn.Sigmoid() 
+        elif "tanh"==self.out_layer:
+            self.out=torch.nn.Tanh()
         else:
-            self.out=torch.nn.Softmax(dim=1)        
+            self.out=torch.nn.Softmax(dim=1)   
+    @property 
+    def cur_device(self):
+        return next(self.parameters()).device    
 class VGGBlock(nn.Module):
     def __init__(self, in_channels, middle_channels, out_channels):
         super().__init__()

@@ -1,5 +1,5 @@
 # Introduction
-The project provides a set of codes for microscope-fluorescencent neuronal iamges' spine annotation ,deep training (torch) and identification. 
+The project provides a set of codes for Microscope-Fluorescent Spine images' annotation ,deep training (torch) and identification. 
 # Directory structure
 The code still needs to be cleaned up and optimized. 
 The current spine analysis pipeline include two steps:
@@ -193,6 +193,7 @@ obtain crop image by label plugin and train data by
    2. error log                   : excution error records
 
 4. config file (.YAML)
+<p hidden >my</p>
 
 ```yaml
 Path:
@@ -227,6 +228,17 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 
 # Upgrade information
 
+<p hidden >crappy</p>
+
+todo
+1. tensorboard
+2. instance segment 
+
+20230502
+1. add mAP metrics
+2. add border loss weight(the spine joint pixel are labeled as bg and spine) and distance to border (skeleton + distance from center to border)
+3. <p hidden >Easter egg </p> 
+
 20230427
 1. fix bug: napari pluin run at current folder only -> also other folder, by `torch.jit`
 2. add another instance segment stratage, by backgournd threshold.
@@ -235,6 +247,8 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 
 
 # history readme 
+
+<p hidden >graduate school life </p>
 
 0. anotation ,plugin include “label”and “time” widget
 
@@ -245,6 +259,8 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 
    You must configure it first, otherwise none of the subsequent steps will run. Some ref yaml profile templates in config folder
 2. image augmentation
+
+<p hidden >Hard Knocks </p>
 
    **run python dataset/enhander.py**
 
@@ -287,3 +303,5 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 6. patch process time imgs(jupyter notebook)
 
    see notebook  in spine-ipynb folder for details
+
+

@@ -14,7 +14,7 @@ def predict_2d_img(model,img):
     # im=im.expand(1,256,256,1)
     im=im.unsqueeze(1)
     ypred=model.forward(im)
-    return ypred[0].detach().numpy() 
+    return ypred[0].cpu().detach().numpy() 
 
 def predict_single_img(model,img):
     """

@@ -59,7 +59,9 @@ from . import enhancer
 from scipy.ndimage import distance_transform_edt
 
 class CustomDatasetUnet2D(Dataset):
-    def __init__(self, datafolder, suffix,classnum=3,transform=None, des="train",enhance_border=False,iteration=100):
+    def __init__(self, datafolder, suffix,classnum=3,transform=None, des="train",
+                 enhance_border=False,iteration=100,
+                 make_dis=False):
         """initial construcotr
         Args:
            
@@ -73,12 +75,14 @@ class CustomDatasetUnet2D(Dataset):
         self.labelfiles = glob(datafolder+'\\label\\*.tif')
         self.pairs=file_base.pair_files(self.imgfiles,self.labelfiles,suffix=suffix)
         self.length             = len(self.imgfiles)
+        print(datafolder)
         assert self.length>0, "data could not be empty, chlease check your dataset folder :"+datafolder
         self.classnum=classnum
         self.transform = transform
         self.iteration=iteration
         self.enhance_border=enhance_border
         self.des=des
+        self.use_dis=make_dis
         self.load_cache()
         # self.show_info()
         
@@ -88,14 +92,16 @@ class CustomDatasetUnet2D(Dataset):
         for img_path,lab_path in zip(self.imgfiles,self.labelfiles):
             image = imread(img_path)
             label = imread(lab_path)
+            if label.shape[-1] in [3,4]:
+                label=np.transpose(label,[2,0,1])
             label=np.array(label,dtype="int64")
             image=np.array(image,dtype="float32")
             # image=normalize(image)
-            ytrue=self._preprocess_mask(label,enhance_border=self.enhance_border)
+            ins,feature=self._preprocess_mask(label,enhance_border=self.enhance_border,use_dist=self.use_dis) # 2/3, H,W
             func=ToTensor()
             image=func(image)# C H W
             self.imgs.append(image)
-            self.labs.append(ytrue)
+            self.labs.append([ins,feature])
     def show_info(self):
         dicts=dict(
             save_suffix=self.save_suffix,
@@ -123,10 +129,10 @@ class CustomDatasetUnet2D(Dataset):
         # print(oidx,idx)
 
         image = self.imgs[idx]
-        y_one_hot = self.labs[idx]
+        ins,y_one_hot = self.labs[idx]
       
-        return image, y_one_hot 
-    def _preprocess_mask(self,mask,enhance_border=False):
+        return image, ins,y_one_hot 
+    def _preprocess_mask(self,label,enhance_border=False,use_dist=False):
         """process mask to  ytrue for train,
         1. trans to support dtype
         2. return one hot
@@ -144,25 +150,27 @@ class CustomDatasetUnet2D(Dataset):
             ndarray: if commom unet,will generate mask which element 0,1,2...
                     if border enabled , will generate
         """ 
-        classnum=self.classnum
-        if enhance_border:
-            border=mask==classnum
-        # fig,axs=plt.subplots(1,3,sharex=1,sharey=1)
-        # for ax in axs:
-        #     ax.set_xticks([])
-        #     ax.set_yticks([])
-        # im=axs[0].imshow(mask,interpolation='none')
-        # cbar=fig.colorbar(im, ax = axs[0])
-        # # cbar.ax.set_title('neck/μm',fontsize=fontsize)
-        # border_thin=mask==classnum-1
-        # border_thin=border_thin>binary_erosion(border_thin)
-        
-        # mask = mask.astype(np.int64)
-        mask[mask>classnum-1]=classnum-1
         func=ToTensor()
+        isinstan=label[0].copy()
+        isinstan[isinstan<2]=0
+        isinstan=func(isinstan)
+        classnum=self.classnum
+        
+        feature=np.squeeze(label[1:])
+        if enhance_border:
+            border=feature==classnum
+            mask=feature
+        elif use_dist:
+            mask=feature[0]
+        else:
+            mask=feature
+        # mask is semantic 
+        mask[mask>classnum-1]=classnum-1
+
         mask1=func(mask) # C H W
         # to one-hot
         y_one_hot = make_one_hot(mask1,self.classnum) # C H W  
+        
         if enhance_border:
             w0=5
             for lab in range(classnum):# edt trans
@@ -172,13 +180,18 @@ class CustomDatasetUnet2D(Dataset):
             y_one_hot[0,...][border]=1+w0  #background and forground all set postive and weight set 2
             # y_one_hot[classnum-1,...][border]=1.5  
             # y_one_hot[classnum-1,...][border_thin]=1.5  
-   
+        elif use_dist:
+            diss=feature[1]
+            diss=func(diss)
+            out=torch.concat([y_one_hot,diss],dim=0)
+            #print(y_one_hot.shape,out.shape)
+            return isinstan,out
         # im=axs[1].imshow(y_one_hot[0,...])
         # cbar=fig.colorbar(im, ax = axs[1])
         # im=axs[2].imshow(y_one_hot[classnum-1,...])
         # cbar=fig.colorbar(im, ax = axs[2])
         # plt.show()
-        return y_one_hot
+        return isinstan,y_one_hot
 
 
 

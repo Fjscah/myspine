@@ -3,15 +3,23 @@ from typing import Optional
 from functools import partial
 import numpy as np
 import torch
+from torch import nn
 import torch.nn.functional as F
 from typing import Optional, List
 from torch.nn.modules.loss import _Loss
 from ._functional import soft_dice_score, to_tensor
-#loss ref : https://github.com/qubvel/segmentation_models.pytorch
+
+
+#---------------------
+#loss fork from  : https://github.com/qubvel/segmentation_models.pytorch
+#---------------------
+
 #: Target mask shape - (N, H, W), model output mask shape (N, 1, H, W).
 BINARY_MODE: str = "binary"
+# classes are mutually exclusive and all pixels are labeled with theese values.
 #: Target mask shape - (N, H, W), model output mask shape (N, C, H, W).
 MULTICLASS_MODE: str = "multiclass"
+#  classes are not mutually exclusive and each class have its own *channel*,
 #: Target mask shape - (N, C, H, W), model output mask shape (N, C, H, W).
 MULTILABEL_MODE: str = "multilabel"
 
@@ -78,6 +86,11 @@ def focal_loss_with_logits(
         loss = loss.sum(0)
 
     return loss
+
+
+#---------------
+# classification Loss
+#-----------------
 class FocalLoss(_Loss):
     def __init__(
         self,
@@ -280,3 +293,52 @@ class DiceLoss(_Loss):
 
     def compute_score(self, output, target, smooth=0.0, eps=1e-7, dims=None) -> torch.Tensor:
         return soft_dice_score(output, target, smooth, eps, dims)
+
+#---------------
+# Recon Loss
+#-----------------
+
+        
+
+class ReconstructionLoss(_Loss): # construction loss for distance transform
+    def __init__(self, type='l2'):
+        super(ReconstructionLoss, self).__init__()
+        if (type == 'l1'):
+            self.loss = nn.L1Loss()
+        elif (type == 'l2'):
+            self.loss = nn.MSELoss()
+        elif (type=='l3') :
+            def loss_l3(y_pred, y_true):
+                #weights=torch.exp(torch.abs(y_true)*2)
+                loss = torch.square(y_pred-y_true)#*weights
+                return torch.mean(loss)
+            # loss = tf.square(dist-dist_gt)
+
+            self.loss=loss_l3
+        else:
+            raise SystemExit('Error: no such type of ReconstructionLoss!')
+    def forward(self, y_pred, y_true):
+        #y_true = y_true.type(y_pred.type())
+        loss=self.loss(y_pred, y_true)
+        return loss
+    
+class Dis_loss(_Loss):
+    def __init__(self, class_loss=FocalLoss("multiclass",2),recon_loss=ReconstructionLoss(),num_class=3) -> None:
+        super().__init__()
+        self.class_loss=class_loss
+        self.rcon_loss=recon_loss
+        self.num_class=num_class
+    def forward(self,y_pred,y_true):
+        # y_pred : B*(numclass+ 1)*W*H
+        # y_true: B*(numclass(onehot)+1(dis))*W*H
+        #print(y_pred.shape,y_true.shape)
+        loss1=self.class_loss(y_pred[:,:self.num_class],y_true[:,:self.num_class])
+        loss2=self.rcon_loss(y_pred[:,self.num_class:],y_true[:,self.num_class:])
+        # if loss1>loss2:
+        #     t=(loss1/loss2).clone().detach()
+        #     loss2=loss2*t
+        # elif loss1<loss2:
+        #     t=(loss2/loss1).clone().detach()
+        #     loss1=loss1*t
+        #print(loss1,loss2)
+        return 10*loss2+loss1
