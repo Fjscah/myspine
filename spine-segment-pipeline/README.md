@@ -130,4 +130,4 @@ If there are any error spots, choose them and click `to spine` or `to den` to re
 # GUI screenshot
 
 ![1666879731179|300x400](image/README/GUI_label.png "spine-segment-pipeline-label widget")
-![1666879731179|300x400](image/README/GUI_Predict.png "spine-segment-pipeline-predict widget")
+![1666879731179|300x400](image/README/GUI_predict.png "spine-segment-pipeline-predict widget")
