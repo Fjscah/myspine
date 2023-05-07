@@ -42,7 +42,7 @@ If you want to run tensorflow implement version, you can find it in history vers
 
 The peocedure had only been tested with **torch-gpu version at windows platform** , other environments profile may encounter some errors which need to be checked and corrected.
 
-**TODO** : requirement.txt(light weight?)
+
 
 ## some environment preparation:
 
@@ -65,19 +65,24 @@ The peocedure had only been tested with **torch-gpu version at windows platform*
 
    vscode download link : https://code.visualstudio.com/
 
-**environment install bat:**
+**Environment install bat:**
+
 ```cmd
 conda create -n pyspine python=3.8.6  pip=22.3.1 :: spineanpyspinealysis is name of virtual environment ,can set others
 conda activate pyspine :: enter virtual environment
 pip install -r requirement.txt
 environment_bat.bat
 ```
+
+
 # Test Data
 
 ## demo dataset download link: 
 
 download dataset and move my-dataset to the program folder.
-https://www.jianguoyun.com/p/Dcha3qUQ297KCxjPmIIFIAA (password：please contact us , data isn't mine), include:
+https://www.jianguoyun.com/p/Dcha3qUQ297KCxjPmIIFIAA 
+
+(password：please contact us , data isn't mine), include:
 
 1. dataset :
    1. crop imgs (npy.npz) for SVM/CNN classifier training
@@ -92,7 +97,6 @@ https://www.jianguoyun.com/p/Dcha3qUQ297KCxjPmIIFIAA (password：please contact 
       * *pt store whole model for predict plugin
 
    
-
 # Simple usage
 
 ## Part1 : prepare annotation dataset (label plugin)
@@ -116,28 +120,30 @@ obtain crop image by label plugin and train data by
 
 ### 2.2 Train Unet Semantic Segmentation network:
 
-**require the YAML file to be configured first**, some yaml examples are provided in config folders 
+**require the [YAML file](#file-description) to be configured first**, some yaml examples are provided in config folders 
 
-**TODO**: yaml file paramenters interpretation
 
 1. data preparation :
 
+   run `1dataset_script.py`  to get dendrite+spine labels, croped imgs/labels,and split to train,test,valid data
 
-2. run 1dataset_script.py  to get dendrite+spine labels, croped imgs/labels,and split to train,test,valid data
 
-
-3. run 2train_script.py to train network
+3. run `2train_script.py` to train network
 
 4. predict img and save result
 
-   You can use (1) **napari plugin** or (2) **ipynb script** to process image data
+   You can use below three ways to predict image data
+   1. [**napari plugin** ](/spine-segment-pipeline)
 
-   1. [use napari plugin](/spine-segment-pipeline)
-
-
-   2. use ipynb scripts in spine-ipynb folder
+   2. **ipynb script** 
 
       “object_and_track.ipynb” script in spine-ipynb folder , and each code block has a brief introduction
+
+   3. **3predict_test.py**
+
+
+
+      
 ## Part 3 (optional)   
 1. transform roi to to imageJ roi file format : use [LabelsToROIs](https://labelstorois.github.io/) plugin \: 
 2. ipynb script
@@ -148,13 +154,7 @@ obtain crop image by label plugin and train data by
    - [x] spine-ipynb\train_ball_line_cnn.ipynb
    - [x] spine-ipynb\train_ball_line_svm.ipynb
 
-# TODO
 
-1. Only culture data under confocal microscopy have been tested so far (pixel size : 0.16um*0.16um xy , z space 0.1um, thick <3 um, data with larger pixel spacing may not be applicable and needs to be optimized ). Try more data
-
-2. try instance segment network
-
-3. ......
 
 # File description
 
@@ -193,7 +193,7 @@ obtain crop image by label plugin and train data by
    2. error log                   : excution error records
 
 4. config file (.YAML)
-<p hidden >my</p>
+
 
 ```yaml
 Path:
@@ -228,16 +228,18 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 
 # Upgrade information
 
-<p hidden >crappy</p>
 
-todo
+
+**TODO**
 1. tensorboard
 2. instance segment 
+3. requirement.txt(light weight?)
+4. yaml file paramenters interpretation
 
 20230502
 1. add mAP metrics
 2. add border loss weight(the spine joint pixel are labeled as bg and spine) and distance to border (skeleton + distance from center to border)
-3. <p hidden >Easter egg </p> 
+
 
 20230427
 1. fix bug: napari pluin run at current folder only -> also other folder, by `torch.jit`
@@ -245,10 +247,18 @@ todo
 3. show error information when load model raise Error.
 4. provide two ways for spliting datset : 1. split ori-image first then crop data (1-1dataset_scipt.py), 2. crop data first then split crop data to tran/valid/test(1-2dataset_scipy.py). 
 
+# TODO
+
+1. Only culture data under confocal microscopy have been tested so far (pixel size : 0.16um*0.16um xy , z space 0.1um, thick <3 um, data with larger pixel spacing may not be applicable and needs to be optimized ). Try more data
+
+2. try instance segment network
+
+3. ......
+
+---
+---
 
 # history readme 
-
-<p hidden >graduate school life </p>
 
 0. anotation ,plugin include “label”and “time” widget
 
@@ -279,6 +289,11 @@ todo
 
    here only use most simple method -- split img to different folder. ( I want to make tfrecord to increase img load velocity , but tfrecord cannot be read correctly )
 4. train model
+
+<p hidden >Easter egg </p> 
+<p hidden >my</p>
+<p hidden >crappy</p>
+<p hidden >graduate school life </p>
 
    **run python trainers/trainer.py**
 
