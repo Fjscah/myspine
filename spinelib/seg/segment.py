@@ -3,7 +3,7 @@ from itertools import cycle
 
 import napari
 import numpy as np
-import scipy
+
 from scipy import ndimage as ndi
 from skimage import filters, morphology
 from skimage._shared.utils import check_nD, deprecate_kwarg
@@ -15,7 +15,7 @@ from skimage.segmentation.morphsnakes import _curvop
 from ..cflow.meanshift_23D import NormShift, generateShift, sobel_numpy
 from ..utils import measure
 from ..utils.npixel import array_slice
-
+from .seg_base import fill_hull,fill_hulls,ndilable,remove_large_objects
 
 def div(u):
     Ii=np.gradient(u)
@@ -172,28 +172,7 @@ def foreach_grow(image,num_iter,init_level_set,searchbox,
 
 
 
-def remove_large_objects(ar, max_size=64, connectivity=1,):
-    out = ar.copy()
-    if max_size == 0:  # shortcut for efficiency
-        return out
 
-    if out.dtype == bool:
-        footprint = ndi.generate_binary_structure(ar.ndim, connectivity)
-        ccs = np.zeros_like(ar, dtype=np.int32)
-        ndi.label(ar, footprint, output=ccs)
-    else:
-        ccs = out
-
-    try:
-        component_sizes = np.bincount(ccs.ravel())
-    except ValueError:
-        raise ValueError("Negative value labels are not supported. Try "
-                         "relabeling the input with `scipy.ndimage.label` or "
-                         "`skimage.morphology.label`.")
-    too_small = component_sizes > max_size
-    too_small_mask = too_small[ccs]
-    out[too_small_mask] = 0
-    return out
 
 def foreach_grow_area(image,num_iter,init_level_set,searchbox,
                      sizeth=np.inf,adth=None,method="geo",
@@ -421,111 +400,6 @@ def morph_chan_vese(image, num_iter, init_level_set='checkerboard',
     return u
 #==↑==↑==↑==↑==↑==↑== growth method ==↑==↑==↑==↑==↑==↑#
 
-#==↓==↓==↓==↓==↓==↓== convex hull for label roi ==↓==↓==↓==↓==↓==↓#
-def fill_hull(image):
-    """
-    Compute the convex hull of the given binary image and
-    return a mask of the filled hull.
-    
-    Adapted from:
-    https://stackoverflow.com/a/46314485/162094
-    https://gist.github.com/stuarteberg/8982d8e0419bea308326933860ecce30
-    This version is slightly (~40%) faster for 3D volumes,
-    by being a little more stingy with RAM.
-    image :binary
-    """
-    # (The variable names below assume 3D input,
-    # but this would still work in 4D, etc.)
-    
-    assert (np.array(image.shape) <= np.iinfo(np.int16).max).all(), \
-        f"This function assumes your image is smaller than {2**15} in each dimension"
-    
-    points = np.argwhere(image).astype(np.int16)
-    hull = scipy.spatial.ConvexHull(points)
-    deln = scipy.spatial.Delaunay(points[hull.vertices])
-
-    # Instead of allocating a giant array for all indices in the volume,
-    # just iterate over the slices one at a time.
-    idx_2d = np.indices(image.shape[1:], np.int16)
-    idx_2d = np.moveaxis(idx_2d, 0, -1)
-
-    idx_3d = np.zeros((*image.shape[1:], image.ndim), np.int16)
-    idx_3d[:, :, 1:] = idx_2d
-    
-    mask = np.zeros_like(image, dtype=bool)
-    for z in range(len(image)):
-        idx_3d[:,:,0] = z
-        s = deln.find_simplex(idx_3d)
-        mask[z, (s != -1)] = 1
-
-    return mask
-
-def fill_hulls(image):
-    """
-    Compute the convex hull of the given binary image and
-    return a mask of the filled hull.
-    
-    Adapted from:
-    https://stackoverflow.com/a/46314485/162094
-    https://gist.github.com/stuarteberg/8982d8e0419bea308326933860ecce30
-    This version is slightly (~40%) faster for 3D volumes,
-    by being a little more stingy with RAM.
-    iamge : labels int
-    """
-    # (The variable names below assume 3D input,
-    # but this would still work in 4D, etc.)
-    
-    assert (np.array(image.shape) <= np.iinfo(np.int16).max).all(), \
-        f"This function assumes your image is smaller than {2**15} in each dimension"
-    
-    labs=np.unique(image)
-    mask = np.zeros_like(image)
-    ndim=image.ndim
-    
-    if ndim==3:
-        for lab in labs:
-            if lab<1: continue
-            points = np.argwhere(image==lab).astype(np.int16)
-            if(len(points)<4):continue
-            try:
-                hull = scipy.spatial.ConvexHull(points)
-                deln = scipy.spatial.Delaunay(points[hull.vertices])
-            except:
-                mask[image==lab] = lab
-                continue
-
-            # Instead of allocating a giant array for all indices in the volume,
-            # just iterate over the slices one at a time.
-            idx_2d = np.indices(image.shape[1:], np.int16)
-            idx_2d = np.moveaxis(idx_2d, 0, -1)
-
-            idx_3d = np.zeros((*image.shape[1:], image.ndim), np.int16)
-            idx_3d[:, :, 1:] = idx_2d
-            
-            
-            for z in range(len(image)):
-                idx_3d[:,:,0] = z
-                s = deln.find_simplex(idx_3d)
-                mask[z, (s != -1)] = lab
-    else:
-        for lab in labs:
-            if lab<1: continue
-            points = np.argwhere(image==lab).astype(np.int16)
-            if(len(points)<4):continue
-            try:
-                hull = scipy.spatial.ConvexHull(points)
-                deln = scipy.spatial.Delaunay(points[hull.vertices])
-            except:
-                mask[image==lab] = lab
-                continue
-
-            idx = np.stack(np.indices(image.shape), axis = -1)
-            out_idx = np.nonzero(deln.find_simplex(idx) + 1)
-           
-            mask[out_idx] = lab
-
-    return mask
-#==↑==↑==↑==↑==↑==↑== convex hull for label roi ==↑==↑==↑==↑==↑==↑#
 
 
 
@@ -573,22 +447,9 @@ def shrink_label(lables):
         nlabls+=mask*lab
     return nlabls
 
-def ndilable(image,offset=1):
-    labels,num=ndi.label(image)
-    labels[labels>0]+=offset
-    return labels,num
+
     
-def remove_small_lable(mask,thsize):
-    labs=measure.unique_labs(mask)
-    newmask=np.zeros_like(mask)
-    for lab in labs:
-        mm=mask==lab
-        mask2=remove_small_objects(mm,thsize)
-        if not mask.any():
-            mask2=mm
-        newmask[mask2]=lab
-   
-    return newmask        
+      
 
 def modify_masks(masks,sizeth=4):
     for n,mask in enumerate(masks):

@@ -52,6 +52,8 @@ def negate_image(I):
         return -(I-np.mean(I))/std
     else:
         return np.zeros_like(I)
+def invert_image(I):
+    return np.max(I)-I
 
 def gaussian(I, sigma):
     """ gaussian smoothing, a wrapper of skimage.filters.gaussian

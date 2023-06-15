@@ -94,19 +94,3 @@ def grad2vectors(grads,mask=None):
 
     return np.array(vectors),points
 
-def get_point(mask):
-    indexs=np.argwhere(mask>0)
-    points=list(indexs)
-    # for ind in indexs:
-    #     index=tuple(ind)
-    #     points.append(index)
-    return points
-
-def get_mask_from_point(points,imgsize):
-    mask=np.zeros(imgsize)
-    points=np.around(points,0)
-    points=np.array(points,dtype=np.uint64)
-    indexs=list(points)
-    mask[tuple(zip(*indexs))]=1
-
-    return mask

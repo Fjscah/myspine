@@ -31,7 +31,6 @@ setuptools.setup(
 "imgaug==0.3.0",
 "pandas==1.0.5",
 "sympy==1.6.1",
-"keras==2.8.0",
 "SQLAlchemy==1.3.18",
 "pip==20.1.1",
 "batchgenerators==0.24",

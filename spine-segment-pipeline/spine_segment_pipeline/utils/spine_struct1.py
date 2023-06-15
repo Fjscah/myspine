@@ -6,7 +6,6 @@ import skimage
 from pip import main
 from sklearn.preprocessing import binarize
 
-sys.path.append(r".")
 import numpy as np
 from scipy import ndimage
 from skimage.measure import label, regionprops, regionprops_table

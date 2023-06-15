@@ -34,7 +34,7 @@ def resortseg(seg,start=1):
     labellist=list(np.unique(seg))
     labellist.sort()
     #print(labellist)
-    arr=seg
+    arr=seg.copy()
     if 0 in labellist:
         labellist.remove(0)
     if len(labellist)>0 and labellist[0]<start:
@@ -69,6 +69,18 @@ def get_joint_border2(label,beginlabel=2):
     label[label==0]=np.max(label)+1
     border2=minimum_filter(label,footprint=footprint)<label
     border=(border1 |border2) & mask
+    return border
+def get_border2(label,beginlabel=2):
+    # return join label pixel
+    label=label.copy()
+    label[label<beginlabel]=0
+    mask=label>0
+    labs=np.unique(label)
+    footprint=np.ones((3,) * label.ndim, dtype=np.int8)
+    border1=maximum_filter(label,footprint=footprint)>label
+    label[label==0]=np.max(label)+1
+    border2=minimum_filter(label,footprint=footprint)<label
+    border=(border1 |border2) 
     return border
 def distance_edt_barrier(mask):
     # return distance matrix : initial =1,road =1- max distance(interger not float) ,wall = max border+1
@@ -219,18 +231,17 @@ if __name__=="__main__":
     lab=imread(filename)
     # label=np.random.randint(0,3,(4,4))
     viewer=napari.Viewer()
-    # # diss[lab<2]=-1
-    diss=make_label_distance_ske(lab,1)
-    diss2=make_label_distance_edt(lab,1)
-    diss4=make_label_distance_norm(lab,1)
-    # diss3=make_label_distance_merge(lab,1)
-    # diss2[lab<2]=-1
-    # diss=np.sum(diss,axis=-1)
-    # diss=np.transpose(diss,(2,0,1))
-    viewer.add_labels(lab)
-    viewer.add_image(diss)
-    viewer.add_image(diss2)
-    viewer.add_image(diss4)
+   
+    # diss=make_label_distance_ske(lab,1)
+    # diss2=make_label_distance_edt(lab,1)
+    # diss4=make_label_distance_norm(lab,1)
+    b=get_border2(lab,2)
+    viewer.add_labels(b)
+
+    # viewer.add_labels(lab)
+    # viewer.add_image(diss)
+    # viewer.add_image(diss2)
+    # viewer.add_image(diss4)
     # viewer.add_image(diss3)
     # print(label,)
     napari.run()

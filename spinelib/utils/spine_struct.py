@@ -16,7 +16,6 @@ except Exception as e:
 from skimage.transform import rotate
 from csbdeep.utils import normalize
 from ..strutensor.hessian import Features2d_H2
-sys.path.append(r".")
 import numpy as np
 from scipy import ndimage
 from skimage.measure import label, regionprops, regionprops_table
@@ -174,7 +173,7 @@ def _trace_back(distance_transform,p):
         p=minpos
 
     return traces,mask
-def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None,img=None,cropO2=None,rotatesize=15):
+def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None,img=None,cropO2=None,rotatesize=15,rotatef=False):
     """ 
     tace head+neck trace to cal length, and get head diameter
     headmask neckmask denmask need be binary 01"""
@@ -205,8 +204,11 @@ def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None,img=None,c
     # plt.figure()
     # plt.imshow(rotatemask)
     # plt.colorbar()
-    # rotatemask=rotate(rotatemask,180-angle,resize=True,preserve_range=True)
-    # rotateimg=rotate(img,180-angle,resize=True,preserve_range=True)
+    rotatedenk=denmask>0
+    if rotatef:
+        rotatemask=rotate(rotatemask,180-angle,resize=True,preserve_range=True)
+        rotateimg=rotate(rotateimg,180-angle,resize=True,preserve_range=True)
+        rotatedenk=rotate(rotatedenk,180-angle,resize=True,preserve_range=True)
     if ndim==3:
         rotatemask=np.swapaxes(rotatemask,0,2)
     rotatemask=rotatemask>4
@@ -230,7 +232,7 @@ def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None,img=None,c
     bindbox=tuple(bindbox)
     rotatemask=rotatemask[bindbox].copy()
     rotateimg=rotateimg[bindbox].copy()
-    rotatedenk=denmask>0
+    # rotatedenk=denmask>0
     rotatedenk=rotatedenk[bindbox].copy()
     
     v=2
@@ -262,7 +264,7 @@ def _trace_length(headmask,neckmask,denmask,centroid,dencord,lab=None,img=None,c
     return length,head,attachd_cnt,rotatemask*lab,rotateimg,rotatedenk
 
 
-def spine_distance(wimg,labels,lab,searchbox,linemask,img,O2=None):
+def spine_distance(wimg,labels,lab,searchbox,linemask,img,O2=None,rotatef=False):
     """caculate distance matrix by weighted img and get trace from spine to dendrite skeleton
 
     Args:
@@ -296,13 +298,9 @@ def spine_distance(wimg,labels,lab,searchbox,linemask,img,O2=None):
         cropO2=None
     croplable=labels[bindbox]
     cropwimg[croplable==lab]=0
-    
+    import matplotlib.pyplot as plt
     # plt.figure()
-    if gwdt_enable:
-        distance_transform=gwdt(cropwimg, structure)
-    else:
-        distance_transform=get_weighted_distance_transform(cropwimg)
-    #distance_transform=gwdt(cropwimg, structure)
+    distance_transform=gwdt(cropwimg, structure)
     # distance_transform=get_weighted_distance_transform(cropimg)
     # plt.imshow(distance_transform)
     # plt.colorbar()
@@ -325,11 +323,11 @@ def spine_distance(wimg,labels,lab,searchbox,linemask,img,O2=None):
     linemask[bindbox][maskcrop>0]=lab # maskcrop[maskcrop>0]
     dencord=[minind[i]+bindbox[i].start for i in range(labels.ndim) ]
     length,headlength,attachd_cnt,rotatemask,rotateimg,rotatedenk=_trace_length(croplable==lab,maskcrop,cropdenmask,centroid,
-                                                                     dencord,lab,cropimg,cropO2,rotatesize=15)
+                                                                     dencord,lab,cropimg,cropO2,rotatesize=15,rotatef=rotatef)
     
     return (centroid,dencord),length,headlength,attachd_cnt,rotatemask,rotateimg,rotatedenk
 
-def spines_distance(img,labels,searchbox=[10,20,20],imgweight=1,disweight=1,useO2=False):
+def spines_distance(img,labels,searchbox=[10,20,20],imgweight=10,disweight=1,useO2=False,rotatef=False):
     """caculate distance matrix by weighted img and get trace from spine to dendrite skeleton
 
     Args:
@@ -358,7 +356,7 @@ def spines_distance(img,labels,searchbox=[10,20,20],imgweight=1,disweight=1,useO
     linemask=np.zeros_like(img,dtype="int16")
     corddict={}
     for lab in labs:
-        cord,length,headlength,attachd_cnt,rotamask,rotaimg,rotaden=spine_distance(weightimg,labels,lab,searchbox,linemask,img,O2)
+        cord,length,headlength,attachd_cnt,rotamask,rotaimg,rotaden=spine_distance(weightimg,labels,lab,searchbox,linemask,img,O2,rotatef)
         corddict[lab]=[cord,length,headlength,attachd_cnt,rotamask,rotaimg,rotaden]
     return corddict,linemask
     

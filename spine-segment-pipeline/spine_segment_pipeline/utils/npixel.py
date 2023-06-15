@@ -5,10 +5,13 @@ import numpy as np
 #=======================#
 def IsValid(p,length):
     return p>=0 and p<length
-def outOfbound(index,shape):
+def outOfbound(index,size):
+    index=np.array(index)
+    size=np.array(size)
     if np.min(index)<0:
         return True
-    if np.min(shape-np.array(index))<=0:
+
+    if np.min(size-index)<=0:
         return True
     return False
 def connect_8(y,x):
@@ -49,12 +52,16 @@ def connect_pixel(point):
 
 def valid_connect_pixel(point,size):
     points=connect_pixel(point)
+    #print(points)
     for n,p in enumerate(points):
         if outOfbound(p,size):
             points[n]=None
     return points
 
-
+def get_move_sclices(move=[1,1,1]):
+    
+    obj=[slice(m,None) if m>0 else slice(None,m) if m<0 else slice(None) for m in move]
+    return tuple(obj)
 
 def valid_border_pixel(point,radius,shape):     
     point=list(point)
@@ -100,20 +107,43 @@ def valid_array_slice(arr,start,size,center=False,pad=None,rad=False):
     #     print(o.start,o.step)
     obj=tuple(obj)
     return arr[obj],obj,offset
-def array_slice(arr,start,size,center=False,pad=None):
+def array_slice(arr,start,size,center=False,pad=None,obj_only=False):
+    if isinstance(size,int):
+        size=[size for i in start]
     if center==True and pad==None:
         obj = [slice(np.max(int(st-s//2),0), int(st+s//2),1) for st,s in zip(start,size)]
         obj=tuple(obj)
-        return arr[obj] 
+       
     elif pad==None and center==False:
         obj = [slice(np.max(int(st),0), int(st+s),1) for st,s in zip(start,size)]
         obj=tuple(obj)
-        return arr[obj] 
-    cropbox=arr[obj]
+       
+    #cropbox=arr[obj]
     # if (croptobbox.shape-size).any():
     #     pass
     #     #todo
-    
+    if obj_only:
+        return obj
     return arr[obj] 
 
 
+def track_back(distance_matrix,end):
+    shape=distance_matrix.shape
+   # print(end)
+    points=valid_connect_pixel(end,shape)
+    paths=[end]
+    old_point=end
+    while True :
+        dis_values=[distance_matrix[tuple(p)] if p is  not None else np.inf for p in points]
+        # dis_value=np.min(dis_values)
+        min_idx=np.argmin(dis_values)
+        min_dis,min_point=dis_values[min_idx],points[min_idx]
+        if min_point is None or min_dis>=distance_matrix[tuple(old_point)]:
+            break
+        #print(min_point)
+        paths.append(min_point)
+        points=valid_connect_pixel(min_point,shape) 
+        old_point=min_point
+    paths.reverse()
+    return paths
+           

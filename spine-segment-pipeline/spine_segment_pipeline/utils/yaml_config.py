@@ -16,16 +16,16 @@ class YAMLConfig:
         #dict_a = self.config["Path"]
         cong=self.config
         
-        trainroot= self.get_entry(['Path', 'Train_path']) 
+        trainroot= self.get_entry(['Path', 'ori_path']) 
         print("relative rootdir",":\t",trainroot)
         trainroot=os.path.abspath(trainroot)
         print("absolute rootdir",":\t",trainroot)
-        self.set_entry(['Path', 'Train_path'],trainroot,overlap=True,isdir=True)
+        self.set_entry(['Path', 'ori_path'],trainroot,overlap=True,isdir=True)
         
         self.set_entry(['Path', 'label_path'],os.path.join(trainroot,"labelcrop"),isdir=True)
-        self.set_entry(['Path', 'data_path'],os.path.join(trainroot,"imgcrop"),isdir=True)
+        self.set_entry(['Path', 'img_path'],os.path.join(trainroot,"imgcrop"),isdir=True)
         self.set_entry(['Path', 'orilabel_path'],os.path.join(trainroot,"label"),isdir=True)
-        self.set_entry(['Path', 'oridata_path'],os.path.join(trainroot,"img"),isdir=True)
+        self.set_entry(['Path', 'oriimg_path'],os.path.join(trainroot,"img"),isdir=True)
         self.set_entry(['Path', 'log_path'],os.path.join(trainroot,"log"),isdir=True)
         self.set_entry(['Path', 'model_path'],os.path.join(trainroot,"model"),isdir=True)
                 

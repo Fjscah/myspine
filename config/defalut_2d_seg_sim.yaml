@@ -1,15 +1,15 @@
 
 Path:
-  Train_path: E:/data/sim # dataset root folder
+  ori_path: E:/data/sim # dataset root folder
 
-  oridata_path: "" #  defalt  Train_path/img    stroe large img eg 512*512
-  orilabel_path: "" # defalt  Train_path/label  stroe label for img eg 512*512
+  oriimg_path: "" #  defalt  ori_path/img    stroe large img eg 512*512
+  orilabel_path: "" # defalt  ori_path/label  stroe label for img eg 512*512
   
-  data_path: "" #  defalt Train_path/imgcrop    store small img eg 128*125
-  label_path: "" # defalt  Train_path/labelcrop will crop from whole img , eg from 512 to 256,128 , see input size
+  img_path: "" #  defalt ori_path/imgcrop    store small img eg 128*125
+  label_path: "" # defalt  ori_path/labelcrop will crop from whole img , eg from 512 to 256,128 , see input size
 
-  log_path: "DATA/log/2Dtorchunet3sim/seg/"  #  defalt  Train_path/log error tensorboard score log dir,configure dir/log path
-  model_path : "DATA/model/2Dtorchunet3sim/seg" ##  defalt  Train_path/model, configure dir/model path
+  log_path: "DATA/log/2Dtorchunet3sim/seg/"  #  defalt  ori_path/log error tensorboard score log dir,configure dir/log path
+  model_path : "DATA/model/2Dtorchunet3sim/seg" ##  defalt  ori_path/model, configure dir/model path
   model_save_path: "DATA/model/2Dtorchune3sim/seg/best.ckpt" # no use
   
 

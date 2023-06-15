@@ -8,7 +8,9 @@ class YAMLConfig:
         if not path: return
         dirpath,shorname,suffix=split_filename(path)
         self.config_path=os.path.abspath(dirpath)
-        print("configure file path",self.config_path)
+        self.path=os.path.abspath(path)
+        print("== Configure file dir",self.config_path)
+        print("== Configure file path",self.path)
         with open(str(path), 'r') as f:
             self.config = yaml.safe_load(f)
         self.init_default()
@@ -16,31 +18,48 @@ class YAMLConfig:
         #dict_a = self.config["Path"]
         cong=self.config
         
-        trainroot= self.get_entry(['Path', 'Train_path']) 
-        isabs=os.path.isabs(trainroot)
-        if isabs:
-            print("absolute rootdir",":\t",trainroot)
-        else:    
-            print("relative rootdir",":\t",trainroot)
-            trainroot=os.path.join(self.config_path,trainroot)
-            print("absolute rootdir",":\t",trainroot)
-        self.set_entry(['Path', 'Train_path'],trainroot,overlap=True,isdir=True)
+        dataroot= self.get_entry(['Path', 'ori_path'])      
+        trainroot= self.get_entry(['Path', 'exp_path']) 
+        dataroot=self.get_abs_path(dataroot)
+        print("== Data root",dataroot)
+        trainroot=self.get_abs_path(trainroot)
+        print("== Train root",trainroot)
+
+        self.set_entry(['Path', 'exp_path'],trainroot,overlap=True,isdir=True)
+        self.set_entry(['Path', 'ori_path'],dataroot,overlap=True,isdir=True)
+        self.set_entry(['Path', 'crop_path'],os.path.join(trainroot,"data"),isdir=True)
+        crop_path=self.get_entry(['Path', 'crop_path'])   
+        crop_path=self.get_abs_path(crop_path)
+        self.set_entry(['Path', 'crop_path'],crop_path,overlap=True,isdir=True)
+        print("== crop_path",crop_path)
         
-        self.set_entry(['Path', 'label_path'],os.path.join(trainroot,"labelcrop"),isdir=True)
-        self.set_entry(['Path', 'data_path'],os.path.join(trainroot,"imgcrop"),isdir=True)
-        self.set_entry(['Path', 'orilabel_path'],os.path.join(trainroot,"label"),isdir=True)
-        self.set_entry(['Path', 'oridata_path'],os.path.join(trainroot,"img"),isdir=True)
+           
+        
+        self.set_entry(['Path', 'label_path'],os.path.join(crop_path,"labelcrop"),isdir=True)
+        self.set_entry(['Path', 'img_path'],os.path.join(crop_path,"imgcrop"),isdir=True)
+        
+        self.set_entry(['Path', 'orilabel_path'],os.path.join(dataroot,"label"),isdir=True)
+        self.set_entry(['Path', 'oriimg_path'],os.path.join(dataroot,"img"),isdir=True)
+        
         self.set_entry(['Path', 'log_path'],os.path.join(trainroot,"log"),isdir=True)
         self.set_entry(['Path', 'model_path'],os.path.join(trainroot,"model"),isdir=True)
-        
+        self.trainroot=trainroot
+        self.dataroot=dataroot # ori
+        self.crop_path=crop_path# train
+    
+     
     def get_abs_path(self,path):
         if not path: return path
         isabs=os.path.isabs(path)
         if isabs:
+            # print("absolute rootdir",":\t",path)
             return path
             
         else:    
-            return os.path.join(self.config_path,path)
+            # print("relative rootdir",":\t",path)
+            abspath=os.path.join(self.config_path,path)
+            # print("absolute rootdir",":\t",abspath)
+            return abspath
              
     def set_entry(self,entry_path,value,overlap=False,isdir=False):
         temp_value = self.config

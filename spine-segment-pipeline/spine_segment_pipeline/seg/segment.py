@@ -688,10 +688,6 @@ def shrink_label(lables):
         nlabls+=mask*lab
     return nlabls
 
-def ndilable(image,offset=1):
-    labels,num=ndi.label(image)
-    labels[labels>0]+=offset
-    return labels,num
     
 def remove_small_lable(mask,thsize):
     labs=measure.unique_labs(mask)

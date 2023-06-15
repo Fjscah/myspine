@@ -1,6 +1,5 @@
 #%%
 import sys
-sys.path.append(".")
 from utils.yaml_config import YAMLConfig
 from utils.basic_wrap import Logger,logit
 from skimage.segmentation import relabel_sequential
@@ -13,7 +12,7 @@ import numpy as np
 #-----------------------#
 # ===== Parameter ======#
 #-----------------------# 
-configfile=r"config\defalut_2d_seg_sim.yaml"
+configfile=r"config\defalut_2d_ins.yaml"
 
 get_seg_tif_flag=False
 crop_tif_flag   =True
@@ -47,7 +46,7 @@ if get_seg_tif_flag:
     print("===== make spine tif ======")
     imgList = os.listdir(imgdir)
     segdir=dict_a["orilabel_path"]   
-    imdir=dict_a["oridata_path"]   
+    imdir=dict_a["oriimg_path"]   
     for imgname in imgList:
         b,suffix=os.path.splitext(imgname)
         imgtif=os.path.join(imgdir,imgname)
@@ -81,9 +80,9 @@ if crop_tif_flag:
     print("===== make dataset ======")
     cong=default_configuration
     laodir=cong.get_entry(['Path', 'label_path']) # label ori dir
-    imodir=cong.get_entry(['Path', 'data_path']) # img ori dir
+    imodir=cong.get_entry(['Path', 'img_path']) # img ori dir
     ladir=cong.get_entry(['Path', 'orilabel_path'])
-    imdir=cong.get_entry(['Path', 'oridata_path'])
+    imdir=cong.get_entry(['Path', 'oriimg_path'])
     w=cong.get_entry(['Data', 'input_sizexy'])
     nz=cong.get_entry(['Data', 'input_sizez'])
     if nz>1:
@@ -94,8 +93,8 @@ if crop_tif_flag:
     savetype=cong.get_entry(['Path', 'save_suffix'])
 
 
-    generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note=note,hull=False,depth=nz,iter=itern,savetype=savetype)
-    print(w,nz,outsize,note)
+    generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note=note,hull=False,depth=nz,iter=itern,savetype=savetype,norm=True,zoom=2)
+    print(w,nz,outsize,note)# first crop then split
 
 
 #%%
@@ -106,5 +105,5 @@ if split_tif_flag:
     # tf.executing_eagerly()
     #trds,_,_=dataloader.get_dataset()
     #SliceLoader.show_data(trds)
-    dataloader.split_data()  
+    dataloader.split_data( )  
 # %%

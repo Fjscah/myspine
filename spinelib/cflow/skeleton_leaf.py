@@ -20,7 +20,7 @@ from skimage.color import label2rgb
 from scipy import ndimage
 
 import skimage.morphology as morph
-
+from ..seg.seg_base import remove_large_objects
 # here put the import lib
 import numpy as np
 from numpy.lib.type_check import imag
@@ -281,10 +281,6 @@ def get_border_connection(skeimage,x,y,z=None,getlabel=False):
         labels,num=ndi.label(square)
     return num
 
-def remove_large_objects(mask,size):
-    mask =mask>0
-    mask1=morphology.remove_small_objects(mask,size,connectivity=mask.ndim)
-    return mask ^ mask1
 
 def tree_end_point(skeleton_one_img):
     # bool or int
@@ -386,7 +382,7 @@ def cut_short_leaf(skeleton_one_img,leaf_length=None): # if length > leaf_length
     
     # remove leaf
     if leaf_length:
-        leafmask=remove_large_objects(leafmask,leaf_length)
+        leafmask=remove_large_objects(leafmask,leaf_length,method="skimage")
     
     return skeleton_one_img ^ leafmask
 

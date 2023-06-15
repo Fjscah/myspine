@@ -2,9 +2,11 @@
 The project provides a set of codes for Microscope-Fluorescent Spine images' annotation ,deep training (torch) and identification. 
 # Directory structure
 The code still needs to be cleaned up and optimized. 
-The current spine analysis pipeline include two steps:
+
+The current spine analysis pipeline include three steps:
    1. obtain your labeled dataset by label plugin
-   2. training deeplearn network for identifying spine
+   2. training deeplearn network 
+   3. predict image data by predict plugin
 
 These two steps correspond to the script folder: `spine-segment-pipeline` and `train` 
 
@@ -18,33 +20,37 @@ After obtaining the spine segment result, you can execute some statistics in `sp
 2. scripts
    +---train : store deep-learning scripts
       +---networks : some networks(cnn,unet++,unet2d)
+      +---loss : some loss function (pair for networks)
+      +---metrics : some metrics function (pair for networks)
       +---trainers
-      |-loss
-      |-metrics
-      |-trainer
-      |-test
-      |-predict
+         |-device : gpu or cpu
+         |-trainer : train network
+         |-test
+         |-predict : predict img and save result
+         |-visual
       +---transformer : no use
       +---utils
-      |-yaml_config : load default yaml profile
-      |-file_base
+         |-yaml_config : load default yaml profile
+         |-file_base : file operation
       +---dataset
-      |-dataloader: loader data and split data into train/valid/test folder
-      |-enhancer: augmentation
-      |-localthreshold
+         |-dataloader: loader data and split data into train/valid/test folder
+         |-enhancer: augmentation
+         |-localthreshold
+         |-distance_transform
    +---spine-segment-pipeline : plugin for napari
    +---spinelib : spine identify lib
+         |-cflow
+         |-imgio
+         |-seg
+         |-strutensor
    +---spine-ipynb : scripts for spine analysis
 ```
 # Environment requirement
 
 If you want to run tensorflow implement version, you can find it in history version while it will not be updated anymore.
 
-The peocedure had only been tested with **torch-gpu version at windows platform** , other environments profile may encounter some errors which need to be checked and corrected.
+The procedure had only been tested with **torch-gpu version at windows platform** , other environments profile may encounter some errors which need to be checked and corrected.
 
-
-
-## some environment preparation:
 
 1. conda with python 3.8.6, torch-cuda,  cudnn 
 
@@ -56,19 +62,20 @@ The peocedure had only been tested with **torch-gpu version at windows platform*
 
    torch downloadlink: https://pytorch.org/
 
-2. install packages  , run `pip install -r requirement.txt` in terminal ? . The module 'gwdt' (optional) need be build by yourself ( make sure you have microsoft C++ buld tool and Cpython , just install it like common python package : `python setup.py install`)
+2. install packages  , run `pip install -r requirement.txt` in terminal ? . 
+3. The module 'gwdt' (optional) need be build by yourself ( make sure you have microsoft C++ buld tool and Cpython , just install it like common python package : `python setup.py install`)
 
    gwdt download link: https://github.com/chunglabmit/gwdt
 
-3. install napari plugin , run `environment_bat.bat’`in terminal
-4. vscode  with python extension(optional):
+4. install **napari plugin** , run `environment_bat.bat’`in terminal
+5. vscode  with python extension(optional):
 
    vscode download link : https://code.visualstudio.com/
 
 **Environment install bat:**
 
 ```cmd
-conda create -n pyspine python=3.8.6  pip=22.3.1 :: spineanpyspinealysis is name of virtual environment ,can set others
+conda create -n pyspine python=3.8.6  pip=22.3.1 :: pyspine is name of virtual environment ,can set others
 conda activate pyspine :: enter virtual environment
 pip install -r requirement.txt
 environment_bat.bat
@@ -198,16 +205,16 @@ obtain crop image by label plugin and train data by
 ```yaml
 Path:
    # datset folder and model/log save folder
-   Train_path: E:\data\Train\Train/2D-2023-seg/ # dataset root folder
+   ori_path: E:\data\Train\Train/2D-2023-seg/ # dataset root folder
 
-   oridata_path: "" #  defalt  Train_path/img    store large img 
-   orilabel_path: "" # defalt  Train_path/label  store label for img 
+   oriimg_path: "" #  defalt  ori_path/img    store large img 
+   orilabel_path: "" # defalt  ori_path/label  store label for img 
   
-   data_path: "" #  defalt Train_path/imgcrop    store small img 
-   label_path: "" # defalt  Train_path/labelcrop will crop from whole img 
+   img_path: "" #  defalt ori_path/imgcrop    store small img 
+   label_path: "" # defalt  ori_path/labelcrop will crop from whole img 
 
-   log_path: "../test-dataset/log/2Dtorchunetpp2/seg/"  #  defalt Train_path/log error tensorboard score log dir
-   model_path : "../test-dataset/model/2Dtorchunetpp2/seg" #  defalt  Train_path/model
+   log_path: "../test-dataset/log/2Dtorchunetpp2/seg/"  #  defalt ori_path/log error tensorboard score log dir
+   model_path : "../test-dataset/model/2Dtorchunetpp2/seg" #  defalt  ori_path/model
    model_save_path: "../test-dataset/model/2Dtorchunetpp2/seg/best.pth" # no use
  
    save_suffix: "-seg"  # see image data suffix
@@ -235,6 +242,10 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 2. instance segment 
 3. requirement.txt(light weight?)
 4. yaml file paramenters interpretation
+
+20230508
+1. fix linux load bug (glob different in win/linux)
+2. 
 
 20230502
 1. add mAP metrics
@@ -274,7 +285,7 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 
    **run python dataset/enhander.py**
 
-   will crop ori image and label from `oridata_path` and `orilabel_path` into size of (`input_sizez`,`input_sizexy`,`input_sizexy`) and store in `data_path` and `label_path` respectively. when stroed in lebel_path, filename will end with `label_suffix`.
+   will crop ori image and label from `oriimg_path` and `orilabel_path` into size of (`input_sizez`,`input_sizexy`,`input_sizexy`) and store in `img_path` and `label_path` respectively. when stroed in lebel_path, filename will end with `label_suffix`.
 
    if use `unet` Trainning model , interger instance label will all set 2, dendrite set 1, background set 0.
 
@@ -285,7 +296,7 @@ The picture illustrates each path' data type, you can run `1dataset_script.py` t
 
    **run python dataset/dataloader.py**
 
-   script will split data into three part: train , valid, test accoding to user specified `partion` and store in  `Train_path` folder for trainning.
+   script will split data into three part: train , valid, test accoding to user specified `partion` and store in  `ori_path` folder for trainning.
 
    here only use most simple method -- split img to different folder. ( I want to make tfrecord to increase img load velocity , but tfrecord cannot be read correctly )
 4. train model

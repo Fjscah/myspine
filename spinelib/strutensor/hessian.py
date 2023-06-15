@@ -311,7 +311,7 @@ def StructureEvi(image,step=2,sigma=None,mode='constant', cval=0,method="hessian
     #     stick=eigen[1]*eigen[1]/(eigen[0]-eigen[1]+0.05)
     # else:
     #     stick=eigen[2]*eigen[2]/(eigen[0]-eigen[1]+0.05)/(eigen[1]-eigen[2]+0.05)
-    if len(eigen==2):
+    if len(eigen)==2:
         stick=eigen[1]/(eigen[0]+0.000005)
     else:
         stick=eigen[2]*eigen[2]/(eigen[0]+0.000005)/(eigen[1]+0.000005)

@@ -1,53 +1,59 @@
+
+
+import matplotlib.pyplot as plt
 import numpy as np
-from skimage.util.shape import view_as_windows,view_as_blocks
-from skimage.util import montage
+import torch
 from skimage.filters.thresholding import (threshold_isodata, threshold_li,
-                                          threshold_mean, threshold_minimum,
+                                          threshold_local, threshold_mean,
+                                          threshold_minimum,
                                           threshold_multiotsu,
                                           threshold_niblack, threshold_otsu,
-                                          threshold_triangle, threshold_yen,threshold_local)
-import sys
+                                          threshold_triangle, threshold_yen)
 from skimage.io import imread
-# sys.path.append("./")
-# sys.path.append("../")
-# sys.path.append("../../")
-# sys.path.append("../../../")
-# sys.path.append("../../../")
+from skimage.util import montage
+from skimage.util.shape import view_as_blocks, view_as_windows
+from torch.utils.data import DataLoader
 
-from .device import set_use_gpu
-from ..dataset.dataloader import get_train_tranform,OrigionDatasetUnet2D,CustomDatasetUnet2D
-import numpy as np
-from ..networks import unetplusplus
-import matplotlib.pyplot as plt
-# import napari
-num_classes=3
-from glob import glob
-from spinelib.seg import unetseg
-from utils.file_base import file_list
+from train.dataset.dataloader import  OrigionDatasetUnet2D
+
+from train.trainers.trainer import Trainer
+from train.networks import unetplusplus
+from train.trainers.device import set_use_gpu
+import matplotlib
 import colorsys
+import os
+from glob import glob
+
+import colorcet as cc
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.widgets import MultiCursor
+
+from spinelib.seg import unetseg
+from utils import file_base
+from utils.basic_wrap import Logger, logit
+from utils.file_base import file_list
 # from PIL import Image
 # from skimage.segmentation import watershed,morphological_chan_vese
 from utils.yaml_config import YAMLConfig
-from utils.basic_wrap import Logger,logit
-import os
-from torch.utils.data import DataLoader
-import torch
-from utils import file_base
-import colorcet as cc
-from matplotlib.widgets import MultiCursor
-from matplotlib.colors import LinearSegmentedColormap
+
+from train.networks import get_network
+
+
 # from torchsummary import summary
-def showims(*ims):
+def showims(*ims,**kwargs):
+    labels=kwargs.get("labels",None)
     fig,axes=plt.subplots(1,len(ims),sharex=True,sharey=True)
     # print(im1.shape)
     for i,im in enumerate(ims):
         #print(im.shape)
         np.dtype
-        if  "int" in im.dtype.__repr__() and len(np.unique(im))<500:
+        if  "int" in im.dtype.__repr__() and len(np.unique(im))<900:
             cmap=LinearSegmentedColormap.from_list("isolum",cc.glasbey)
             axes[i].imshow(im,interpolation='none',cmap=cmap)
         else:
-            axes[i].imshow(im,interpolation='none')
+            axes[i].imshow(im,interpolation='none',cmap="gray")
+        if i < len(labels):
+            axes[i].set_title(labels[i])
     # axes[1].imshow(im2,interpolation='none')
     # axes[2].imshow(im3,interpolation='none')
     multi = MultiCursor(fig.canvas, axes, color='r', lw=1, horizOn=True, vertOn=True)
@@ -60,16 +66,15 @@ class Predict():
             return
 
         self.configuration = configuration
-        self.network_info=self.configuration.config["Network"]
+
         dict_a = self.configuration.config["Path"]
         dict_b = self.configuration.config["Training"]
         dict_c = self.configuration.config["Data"]
-        #print(dict_b)
+
         self.__dict__.update(dict_a)
         self.__dict__.update(dict_b)
         self.__dict__.update(dict_c)
-        self.__dict__.update(self.network_info)
-        self.Train_path=os.path.abspath(self.Train_path)
+        self.ori_path=os.path.abspath(self.ori_path)
         if "z" in self.axes:
             self.imgshape = (self.input_sizez, self.input_sizexy,
                              self.input_sizexy,1)
@@ -80,6 +85,8 @@ class Predict():
     
         self.initial_gpu(use_gpu)
         self.inital_model()
+        self.initial_allfunc()
+        
     def initial_gpu(self,use_gpu):
         device,ngpu,ncpu=set_use_gpu(use_gpu)
         self.use_gpu=use_gpu
@@ -91,35 +98,43 @@ class Predict():
         #-----------------------#
         #   Load model weights  #
         #-----------------------#
-        checkpoint_save_path = premodel
-        #checkpoint_save_path = ""  #r"models\M2d_seg\modelep100-loss0.011.h5"  # 模型参数保存路径
-        if (not checkpoint_save_path) and (denovo is False):
-            # find neweat weight file
-            paths=file_base.file_list_bytime(self.model_path,".pth")
-            checkpoint_save_path=paths[-1] if paths else ""   
-        if checkpoint_save_path and os.path.exists(checkpoint_save_path):
-            self.model.load_state_dict(torch.load(checkpoint_save_path))
-            self.model.eval()
-            self.logger.logger.info(
-                "\n==============LOAD PRETRAINED model==============\n"+
-                checkpoint_save_path+
-                "\n=================================================\n"
-            )
-    
+        if denovo is False:
+            checkpoint_save_path = premodel
+            # 模型参数保存路径
+            if not checkpoint_save_path:
+                # find neweat weight file
+                paths=file_base.file_list_bytime(self.model_path,".pth")
+                checkpoint_save_path=paths[-1] if paths else ""   
+            if checkpoint_save_path and os.path.exists(checkpoint_save_path):
+                state = torch.load(checkpoint_save_path)
+                self.model.load_state_dict(state["model"])
+                #self.start_epoch=state["epoch"]
+                #self.history.datas=state["history"]
+                self.model.eval()
+                self.logger.logger.info(
+                    "\n==============LOAD PRETRAINED model==============\n"+
+                    checkpoint_save_path+
+                    "\n=================================================\n"
+                )
+    def initial_allfunc(self):
+        pass
+        # #--- INSTANCE---#
+        # iname=self.instance["name"]
+        # ikwargs=self.instance["kwargs"]
+        # self.ins=get_instancefunc(iname,ikwargs)
     def inital_model(self):
-        
-        network_type = self.configuration.get_entry(['Network', 'modelname'])
-        network_type = self.configuration.get_entry(['Network', 'modelname'])
-        num_classes=self.num_classes
-        add_num=0
-        if "dis" in self.save_suffix:
-            add_num=1
-        if "unet2d" == network_type:
-            self.model =unetplusplus.UNet2d(num_classes+add_num,1)
-        elif "unet++"==network_type:
-            self.model=unetplusplus.NestedUNet(num_classes+add_num,1)
-        
-        self.model.load_network_set(self.network_info)
+        network_type = self.Network["name"]
+        netkwarg=self.Network["kwargs"]
+        #num_classes=self.num_classes
+        # add_num=0
+        # if "dis" in self.save_suffix:
+        #     add_num=1
+        # if "unet2d" == network_type:
+        #     self.model =UNet2d(num_classes+add_num,1)
+        # elif "unet++"==network_type:
+        #     self.model=NestedUNet(num_classes+add_num,1)
+        self.model=get_network(network_type,netkwarg)
+       # self.model.load_network_set(self.network_info)
         self.model.to(self.device)
         #summary(self.model,(1,self.input_sizexy,self.input_sizexy))
         # self.show_train_info()
@@ -141,6 +156,7 @@ class Predict():
                 mask,spineprs,denprs,bgprs=unetseg.predict_single_img(self.model,image)
                 #output = model(image)[0]#.cpu().data.numpy()
                 #print(image.shape)
+           
                 showims(image.squeeze(),label[0,0],bgprs,denprs,spineprs,mask)
 
 
@@ -162,22 +178,22 @@ class Predict():
         #-----------------------#
         #  config load  #
         #-----------------------#
-        Train_path=self.Train_path
+        ori_path=self.ori_path
         suffix=self.save_suffix # seg,spine,den
-        num_classes=self.num_classes
+        num_classes=self.num_class
         log_dir=self.log_path
         model=self.model
-        train_trainform=get_train_tranform()
+        train_trainform=None#get_train_tranform()
         self.load_weight(False,premodel)
         if data is None:
             #self.enhance_border=True if "border" in self.save_suffix else False
-            test_datast=OrigionDatasetUnet2D(Train_path + "\\test",suffix,num_classes,iteration=0,des="test",transform=train_trainform)
+            test_datast=OrigionDatasetUnet2D(ori_path + "/test",suffix,num_classes,iteration=0,des="test",transform=train_trainform)
             test_dataloader = DataLoader(test_datast,batch_size = 1,shuffle=False)
             self.test_epoch(test_dataloader,model)
         elif isinstance(data,list) and os.path.isdir(data[0]): # img folder, lab folder 
             
-            imgfiles = glob(data[0]+'\\*.tif')
-            labelfiles = glob(data[1]+'\\*.tif')
+            imgfiles = glob(data[0]+'/*.tif')
+            labelfiles = glob(data[1]+'/*.tif')
             pairs=file_base.pair_files(imgfiles,labelfiles,suffix=data[2])
             for img,lab in pairs:
                 # print(img)
@@ -193,7 +209,7 @@ class Predict():
                 ypred=model.predict_2d_img(img)
                 showims(img,lab,ypred[0],ypred[1],ypred[2])
         elif os.path.isdir(data): # img dir
-            imgfiles = glob(data+'\\*.tif')
+            imgfiles = glob(data+'/*.tif')
            
             for img in imgfiles:
                 print(img)
@@ -203,20 +219,22 @@ class Predict():
                 showims(img,ypred[0],ypred[1],ypred[2])
         else: # filename
             img=imread(data).astype("float32")
-            
-            ypred=model.predict_2d_img(img)
-            from spinelib.seg import unetseg
-            if "dis" in self.save_suffix:
+            # self.ins.device="cpu"
+            ins,prob,mask=model.off_predict(img)
+            # ypred=model.predict_2d_img(img)
+            # from spinelib.seg import unetseg
+            # if "dis" in self.save_suffix:
                 
-                spine_label=unetseg.instance_unetmask_by_dis(model,img,th=0.15,spinesize_range=[4,800])
-            else:
-                mask,spinepr,denpr,bgpr=unetseg.predict_single_img(model,img)
-                if model.out_layer=="sigmoid":
-                    spine_label=unetseg.instance_unetmask_by_border(spinepr,mask==2,bgpr=bgpr,th=0.009,spinesize_range=[4,800])
-                else:
-                    spine_label=unetseg.instance_unetmask_bypeak(spinepr,mask,searchbox=[15,15],min_radius=5,spinesize_range=[4,800])
+            #     spine_label=unetseg.instance_unetmask_by_dis(model,img,th=0.15,spinesize_range=[4,800])
+            # else:
+            #     mask,spinepr,denpr,bgpr=unetseg.predict_single_img(model,img)
+            #     if model.out_layer=="sigmoid":
+            #         spine_label=unetseg.instance_unetmask_by_border(spinepr,mask==2,bgpr=bgpr,th=0.009,spinesize_range=[4,800])
+            #     else:
+            #         spine_label=unetseg.instance_unetmask_bypeak(spinepr,mask,searchbox=[15,15],min_radius=5,spinesize_range=[4,800])
             
-            showims(img,ypred[0],ypred[1],ypred[2],spine_label)
+            # showims(img,ypred[0],ypred[1],ypred[2],spine_label)
+            showims(img,ins,mask,labels=["img","ins","mask"])
             
         
 def showtwo(im1,im2):
@@ -243,9 +261,7 @@ def predict_dir(modelpath=r"D:\spine\spinesoftware\myspine\models\M2d_den\modele
     model=unet.UNet2D()
     model.build(input_shape =(4,256,256,1))
     model.load_weights(modelpath)
-#     model=tf.keras.models.load_model(
-#     r"D:\spine\spinesoftware\myspine\models\M2d_den\model", custom_objects=None, compile=True, options=None
-# )
+
     imgdir=r"C:\Users\ZLY\Desktop\Train\4D\deconvole_2D_one"
 
 
@@ -272,9 +288,7 @@ def predict_movie(imgf=r"D:\spine\Train\4D\deconvolve_2D\MAX_decon_20211111-24D.
           modelpath=r"D:/spine/spinesoftware/myspine/models/M2d_den\modelep008-loss0.013.h5"):
     imgs=imread(imgf)
     model=unet.UNet2D()
-#     model=tf.keras.models.load_model(
-#     r"D:\spine\spinesoftware\myspine\models\M2d_den\model", custom_objects=None, compile=True, options=None
-# )
+
     model.build(input_shape =(4,512,512,1))
     model.load_weights(modelpath)
     print("img shape : ",imgs.shape)
@@ -302,9 +316,7 @@ def predict_4D(imgf=r"D:\data\Train\4D\deconvolve_4D\decon_20211111-24D.tif",
     adth=imgss[0]>threshold_otsu(imgss[0])
     # adth=morphological_chan_vese(imgss[0],20,adth,1,1,2)
     model=unet.UNet2D()
-#     model=tf.keras.models.load_model(
-#     r"D:\spine\spinesoftware\myspine\models\M2d_den\model", custom_objects=None, compile=True, options=None
-# )
+
     model.build(input_shape =(4,512,512,1))
     model.load_weights(modelpath)
     print("img shape : ",imgss.shape)

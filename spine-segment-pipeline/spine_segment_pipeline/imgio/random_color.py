@@ -24,10 +24,7 @@ def random_color_f():
     random.shuffle(rgbl)
     return np.array(rgbl)/255
 
-import seaborn as sns
-def random_sns_pallete():
-    palette = sns.color_palette(None, 3)
-    return palette
+
 
 def random_color_list(n):
     return [random_hex() for i in range(n)]

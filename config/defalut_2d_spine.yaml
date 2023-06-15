@@ -1,0 +1,87 @@
+
+Path:
+  ori_path: E:/data/myspine-dataset/2D-morph-seg # dataset root folder
+  oriimg_path: "" #  defalt  ori_path/img    stroe large img eg 512*512
+  orilabel_path: "" # defalt  ori_path/label  stroe label for img eg 512*512
+  
+  exp_path: "../DATA/2d_spine"
+  img_path: "" #  defalt exp_path/data/imgcrop    store small img eg 128*125
+  label_path: "" # defalt  exp_path/data/labelcrop will crop from whole img , eg from 512 to 256,128 , see input size
+
+  log_path: ""  #  defalt  exp_path/log error , tensorboard score log dir,configure dir/log path
+  model_path : "" #  defalt  exp_path/data/model, configure dir/model path
+  model_save_path: "DATA/model/2Dtorchune3/seg/best.ckpt" # no use
+  
+
+  save_suffix: "-ins" # -border todo : -den -spine
+  label_suffix: "-seg"
+
+  filetype: ".tif"
+
+Data:
+  axes: 'yx' # change to zyx ,todo
+  z_factor: 2.0 # z spacing / x spancing ,x spacing=y spacing,todo
+  input_sizez: 1  # Input depth ,z
+  input_sizexy: 256   # 256*256,Input feature width/height,for crop generate img data
+  num_classes: 2 # include zero background
+  inputchannel: 1 # 1: grayscale,todo
+  partion : [0.9,0.1,0.0] # train,valid,test+=1
+  c_val : "auto" # background value
+  data_augmentation: #no use todo
+    translate: false
+    flip: true
+    rotate: true
+    probability: 0.3
+    affine: 0.3
+
+    
+Training:
+
+  task_type: "spine" # -border todo : -den -spine
+
+  Network:
+    name : "ERFnet" # unet2d unet++  ...
+    kwargs: {
+          num_classes: [3, 1],
+          inputchannel: 1,
+
+    }
+
+    
+  loss_type:
+    name: "ERF_loss" 
+    kwargs: {
+    
+      to_center : False,
+      n_sigma: 1,  # 1 for circular margin, 2 for elliptical margin
+      foreground_weight: 10,
+      width : 256,
+      height : 256,
+      # 'w_inst': 1,
+      # 'w_var': 10,
+      # 'w_seed': 1
+    }
+
+  Metrics:
+    name : "ERF_miou"
+    kwargs: {}
+  instance:
+    name :  ERF_single_cluster
+    kwargs:
+      width : 256
+      height : 256
+      resolusion : 256
+
+  visualizer_keys :  ['image','grad0','grad1' ,'pred1','pred2', 'sigma', 'seed']
+  batch_size: 20
+  keep_top: 10
+  loss_plot_epoch: 1
+  visual_epoch : 1
+  mAP_epoch : 20
+  cls_weight: [1,1,1]
+  epochs: 500
+  optimizer_name: "Adam" # supports [Adam, Adagrad, RMSProp]
+  learning_rate: 0.001
+  denovo : False
+  seed: 42
+

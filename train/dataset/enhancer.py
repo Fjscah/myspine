@@ -7,7 +7,7 @@
 @Version :   1.0
 @Contact :   www_010203@126.com
 @License :   GNU, LNP2 group
-@Desc    :   enhance data offline/online
+@Desc    :   The module is used to enhance the image and label offline, include crop/rotate/blur/affine image and label, and save them.
 '''
 
 # here put the import lib
@@ -19,7 +19,6 @@ from skimage.io import imread,imsave
 import os
 import sys
 
-sys.path.append(".")
 
 from skimage.measure import label, regionprops, regionprops_table
 from utils import file_base
@@ -33,7 +32,8 @@ from imgaug.augmentables.heatmaps import HeatmapsOnImage
 # Standard scenario: You have N=16 RGB-images and additionally one segmentation
 # map per image. You want to augment each image and its heatmaps identically.
 import matplotlib.pyplot as plt
-from .segment import fill_hulls,resortseg
+from spinelib.seg.seg_base import fill_hulls,resortseg
+
 from . import dataloader 
 from utils.yaml_config import YAMLConfig
 from utils.file_base import create_dir,split_filename
@@ -44,6 +44,9 @@ from skimage.filters.thresholding import (threshold_isodata, threshold_li,
                                           threshold_niblack, threshold_otsu,
                                           threshold_triangle, threshold_yen,threshold_local)
 import tifffile
+
+
+
 # from .dataloader import load_img
 def savelabel(arr,filename):
     tifffile.imwrite(
@@ -64,22 +67,25 @@ def savepr(arr,filename):
     )
     # print("save :",os.path.abspath(filename))
 #-----------------------#
-#  custom Transform online   #
+#  custom Transform online   # TODO
 #-----------------------#
 
 #-----------------------#
 #  custom Transform offline   #
 #-----------------------#
-def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
+def generate_crop_img_save_list(pairs,imodir,laodir,outsize,
+                                hull=False,depth=10,iter=10,
+                                cval=None,savetype="seg",
+                                zoom=1.0,norm=False,startn=0):
+    #assert len(pairs)>0, "empty pairs!"
+    if len(pairs)==0:
+        print("empty imgs, please check")
+        return 0
     images=[]
     segmaps=[]
     heatmaps=[]
     #print(imdir,"\n",ladir,imfiles,lafiles,pairs)
-    if len(pairs)==0:
-        print("empty imgs, please check")
-        return 0
-    print("outsize :",outsize)
-    
+    #print("outsize :",outsize)
     for img,labelf in pairs:
         print(img,"\t",labelf)
         if depth>1: # z larer num
@@ -88,45 +94,27 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
         else:
             im=dataloader.load_img(img)
             lab=dataloader.load_img(labelf)
+        if norm:
+            im = normalize(im,1,99.8,axis=None)
+        h,w=im.shape[:2]
         # print(im.shape)
         lab=lab.astype(np.uint16)
-        orilab=lab.copy()[...,None]
-        if "dis" in savetype:
-            labfolder,shortname,suffix=split_filename(labelf)
-            diss=make_label_distance_norm(lab,1)[..., np.newaxis]
-            create_dir(os.path.join(labfolder,"dis"))
-            merge_diss=np.concatenate([lab[..., np.newaxis],diss],axis=-1)
-            merge_diss=merge_diss.transpose([2,0,1])
-            savepr(merge_diss,os.path.join(labfolder,"dis",shortname+"-dis.tif"))
-        if 'border' in savetype:
-            labfolder,shortname,suffix=split_filename(labelf)
-            border=get_joint_border2(lab,2)
+        if "spine" in savetype: # 1 is den
             lab[lab>1]=2
-            lab[border]=3
-            create_dir(os.path.join(labfolder,"border"))
-            savelabel(lab,os.path.join(labfolder,"border",shortname+"-border.tif"))
-        elif "spine" not in savetype:
-            lab[lab>1]=2
+            lab[lab<2]=0
+        if "den" in savetype: # 1 is den
+            lab[lab>1]=0
+      
         
-        if denmode:
-            lab=(lab>0).astype(np.uint16)
-            adth=local_threshold(im).astype(np.uint16)
-            print(lab.shape,adth.shape)
-            adth[adth>0]=2
-            adth[lab>0]=1
-            lab=adth
-        
-        
-        if hull:
-            lab=fill_hulls(lab)
-            lab,_=resortseg(lab)
+        if hull and "den" not in savetype:
+            lab=fill_hulls(lab,2)
+            lab,_=resortseg(lab,2)
         if depth>1:
             im=im.swapaxes(0,2)
             lab=lab.swapaxes(0,2)
         else:
             im=im[..., np.newaxis]
             lab=lab[..., np.newaxis]
-            lab=np.concatenate([orilab,lab],axis=-1)
         
         # plt.imshow(lab)
         # plt.show()
@@ -135,29 +123,16 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
         #im = normalize(im,1,99.8,axis=None)
         images.append(im)
         segmaps.append(lab)
-        if "dis" in savetype:
-            
-            #diss_h=HeatmapsOnImage(diss,shape=diss.shape,min_value=-1,max_value=1)
-            heatmaps.append(diss)
-    # if hull:
-    #     hulldir="hulldir"
-    #     hulldir=os.path.join(file_base.get_parent_dir(imdir,1),hulldir)
-    #     file_base.create_dir(hulldir)
-    #     for seg,(img,labelf) in zip(segmaps,pairs):
-    #         f=os.path.basename(labelf)
-    #         of=os.path.join(hulldir,f)
-    #         seg=seg.swapaxes(0,2)
-    #         imsave(of,seg)
+
             
     if cval is None:
         # threshold_li()
-        vmean=np.nanmean([np.nanmean(im[lab[...,:1]==0]) for im,lab in zip(images,segmaps)])
-        vstd=np.nanmean([np.nanstd(im[lab[...,:1]==0]) for im,lab in zip(images,segmaps)])
+        vmean=np.nanmean([np.nanmean(im[lab==0]) for im,lab in zip(images,segmaps)])
+        vstd=np.nanmean([np.nanstd(im[lab==0]) for im,lab in zip(images,segmaps)])
         print(vmean,vstd)
         cval=(int(max(0,vmean-vstd)),int(vmean+vstd))
         
-
-    sometimes = lambda aug: iaa.Sometimes(0.5, aug)
+    sometimes = lambda aug: iaa.Sometimes(0.7, aug)
     # images = np.random.randint(0, 255, (16, 128, 128, 1), dtype=np.uint8)
     # segmaps = np.random.randint(0, 10, size=(16, 128, 128, 1), dtype=np.int32)
     # segmaps = np.expand_dims(np.sum(images,axis=-1),axis=-1)>180
@@ -168,9 +143,11 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
         height=outsize[0]
         width=outsize[1]
         
-
+    zoomh=int(zoom*h)#must int
+    zoomw=int(zoom*w)
     seq = iaa.Sequential([
         #iaa.PadToFixedSize(width=32, height=32),
+        iaa.Resize([zoomh,zoomw]),
         iaa.Fliplr(0.5), # horizontally flip 50% of all images
         iaa.Flipud(0.5), # vertically flip 20% of all images
         
@@ -192,48 +169,33 @@ def generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=False,depth=10,
         #iaa.Crop(px=(0, 10))
     ])
     N=len(images)
-    cnt0=0
+    cnt0=startn
     for it in range(iter):
-        if "dis" in savetype:
-            images_aug, segmaps_aug,heatmaps_sug = seq(images=images, segmentation_maps=segmaps,heatmaps=heatmaps)
-            for n,(im1,im2,im3) in enumerate(zip(images_aug,segmaps_aug,heatmaps_sug)):
-                
-                oim=os.path.join(imodir,str(it*N+n)+".tif")
-                ola=os.path.join(laodir,str(it*N+n)+savetype+".tif")
 
+        images_aug, segmaps_aug = seq(images=images, segmentation_maps=segmaps)
+        for n,(im1,im2) in enumerate(zip(images_aug,segmaps_aug)):
+            
+            oim=os.path.join(imodir,str(startn+it*N+n)+".tif")
+            ola=os.path.join(laodir,str(startn+it*N+n)+savetype+".tif")
+            if depth>1:
+                im1=im1.swapaxes(0,2)
+                im2=im2.swapaxes(0,2)
+            else:
                 #show_two(im1,im2)
                 im1=np.squeeze(im1)
-                im2=np.transpose(im2,[2,0,1])
-                im3=np.squeeze(im3)[None,...]
-                # imsave(oim,im1)
-                savepr(im1,oim)
-                # print(np.min(im3))
-                #print(im2.shape,im3.shape)
-                im4=np.concatenate([im2,im3],axis=0,dtype="float32")
-                savepr(im4,ola)
-                cnt0+=1
-        
-        else:
-            images_aug, segmaps_aug = seq(images=images, segmentation_maps=segmaps)
-            for n,(im1,im2) in enumerate(zip(images_aug,segmaps_aug)):
-                
-                oim=os.path.join(imodir,str(it*N+n)+".tif")
-                ola=os.path.join(laodir,str(it*N+n)+savetype+".tif")
-                if depth>1:
-                    im1=im1.swapaxes(0,2)
-                    im2=im2.swapaxes(0,2)
-                else:
-                    #show_two(im1,im2)
-                    im1=np.squeeze(im1)
-                    im2=np.transpose(im2,[2,0,1])
-                # imsave(oim,im1)
-                savepr(im1,oim)
-                savelabel(im2,ola)
-                cnt0+=1
+                im2=np.squeeze(im2)
+            # imsave(oim,im1)
+            savepr(im1,oim)
+            if (im2==1).any():
+                im2=resortseg(im2,1)[0]
+            else:
+                im2=resortseg(im2,2)[0]
+            savelabel(im2,ola)
+            cnt0+=1
     # print("save crop num",cnt0)
     return cnt0
 
-def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=False,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
+def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=False,depth=10,iter=10,cval=None,savetype="seg",zoom=1.0,norm=False):
     """from pdir,load img and label,then crop or tanseform to generate more img and save in odir
 
     Args:
@@ -246,7 +208,6 @@ def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=Fal
         hull (bool, optional): whethre hull for roi point. Defaults to True.
         depth (int, optional): z. Defaults to 10.
         iter (int, optional): generate how much crop image for each image. Defaults to 10.
-        denmode: use for only spine label no dendrite label
     Raises:
         FileNotFoundError: _description_
 
@@ -262,9 +223,9 @@ def generate_crop_img_save(imdir,ladir,imodir,laodir,outsize,note="seg",hull=Fal
     file_base.create_dir(imodir)
     file_base.create_dir(laodir)
     pairs=file_base.pair_files(imfiles,lafiles,note)
-    generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=hull,depth=depth,iter=iter,cval=cval,denmode=denmode,savetype=savetype)
+    generate_crop_img_save_list(pairs,imodir,laodir,outsize,hull=hull,depth=depth,iter=iter,cval=cval,savetype=savetype,zoom=zoom,norm=norm)
 
-def generte_crop_img_save_split(imdir,ladir,imodir,laodir,outsize,note="seg",hull=False,depth=10,iter=10,cval=None,denmode=False,savetype="seg"):
+def generte_crop_img_save_split(imdir,ladir,imodir,laodir,outsize,note="seg",hull=False,depth=10,iter=10,cval=None,savetype="seg",zoom=1.0,norm=False):
     """generate crop data for train, valid , test directly 
 
     Args:
@@ -278,7 +239,6 @@ def generte_crop_img_save_split(imdir,ladir,imodir,laodir,outsize,note="seg",hul
         depth (int, optional): _description_. Defaults to 10.
         iter (int, optional): _description_. Defaults to 10.
         cval (_type_, optional): _description_. Defaults to None.
-        denmode (bool, optional): _description_. Defaults to False.
         savetype (str, optional): _description_. Defaults to "seg".
     """
     pass
@@ -418,9 +378,9 @@ def split_img_to_roi(img="",labelf="",outdir=""):
     
 #     cong=default_configuration
 #     laodir=cong.get_entry(['Path', 'label_path']) # label ori dir
-#     imodir=cong.get_entry(['Path', 'data_path']) # img ori dir
+#     imodir=cong.get_entry(['Path', 'img_path']) # img ori dir
 #     ladir=cong.get_entry(['Path', 'orilabel_path'])
-#     imdir=cong.get_entry(['Path', 'oridata_path'])
+#     imdir=cong.get_entry(['Path', 'oriimg_path'])
 #     w=cong.get_entry(['Data', 'input_sizexy'])
 #     nz=cong.get_entry(['Data', 'input_sizez'])
 #     if nz>1:

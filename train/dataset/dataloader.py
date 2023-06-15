@@ -14,33 +14,28 @@
 from glob import glob
 
 import scipy.ndimage
+import skimage.measure
 import sys
 from skimage.morphology import binary_dilation, convex_hull_image, dilation,binary_erosion
 
 import numpy as np
-from albumentations.core.composition import Compose, OneOf
-from albumentations.augmentations import transforms,RandomBrightnessContrast
-from albumentations import RandomRotate90,VerticalFlip,HorizontalFlip
-sys.path.append(".")
+
 import math
 import os
 import shutil
-from functools import partial
+
 from random import shuffle
 
-import cv2
+
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
+from .distance_transorm import get_joint_border2,get_border2
 from skimage.io import imread, imsave
 
 from utils import file_base, yaml_config
 from utils.basic_wrap import timing
 from utils.yaml_config import YAMLConfig
 
-from torchio import ScalarImage, LabelMap, Subject, SubjectsDataset, Queue
-from torchio.data import UniformSampler
-from csbdeep.utils import normalize
 import torch
 from torch.utils.data import Dataset
 from torchvision import datasets
@@ -51,31 +46,31 @@ import pandas as pd
 from torchvision.io import read_image
 import imgaug.augmenters as iaa
 from torch.utils.data import DataLoader
-
-
-from skimage.morphology import binary_dilation, convex_hull_image, dilation,binary_erosion
-
+from torchvision.transforms.functional import rotate
 from . import enhancer 
 from scipy.ndimage import distance_transform_edt
 
-class CustomDatasetUnet2D(Dataset):
+class SpineDataset(Dataset):
     def __init__(self, datafolder, suffix,classnum=3,transform=None, des="train",
-                 enhance_border=False,iteration=100,
+                 enhance_border=False,iteration=100,task_type="seg",
                  make_dis=False):
         """initial construcotr
         Args:
            
             datafolder (string): img and label root directory
-            suffix (string): label type suffix:like spine , den , seg
-            classnum(int):indluce background 0.
-            transform (function, optional):   enhance. Defaults to None.
+            suffix (string): label type suffix: like spine , den , seg,...
+            classnum(int):indluce background 0. usualy 3 : bg, den, spine
+            transform (function, optional):   enhance. Defaults to None. online transform #TODO
             mode (string, optional): train,valid ,test. Defaults to train.
         """
-        self.imgfiles = glob(datafolder+'\\img\\*.tif')
-        self.labelfiles = glob(datafolder+'\\label\\*.tif')
+        self.imgfiles = glob(datafolder+'/img/*.tif')
+        self.labelfiles = glob(datafolder+'/label/*.tif')
+        self.suffix=suffix
+        self.task_type=task_type
         self.pairs=file_base.pair_files(self.imgfiles,self.labelfiles,suffix=suffix)
-        self.length             = len(self.imgfiles)
-        print(datafolder)
+        
+        self.length             = len(self.pairs)
+        print(datafolder,"find files:",self.length)
         assert self.length>0, "data could not be empty, chlease check your dataset folder :"+datafolder
         self.classnum=classnum
         self.transform = transform
@@ -89,15 +84,16 @@ class CustomDatasetUnet2D(Dataset):
     def load_cache(self):
         self.imgs=[]
         self.labs=[]
-        for img_path,lab_path in zip(self.imgfiles,self.labelfiles):
-            image = imread(img_path)
-            label = imread(lab_path)
-            if label.shape[-1] in [3,4]:
-                label=np.transpose(label,[2,0,1])
+        for img_path,lab_path in self.pairs:
+            #print(img_path,lab_path)
+            #print(img_path,lab_path)
+            image = imread(img_path) # H W 
+            label = imread(lab_path) # H W
             label=np.array(label,dtype="int64")
             image=np.array(image,dtype="float32")
             # image=normalize(image)
-            ins,feature=self._preprocess_mask(label,enhance_border=self.enhance_border,use_dist=self.use_dis) # 2/3, H,W
+            # ins : instance, only include spine; feature: include spine and den, with some transorm information, like one hot, binary, distance transform and so on
+            ins,feature=self._preprocess_mask(label,process_method=self.task_type) # 2/3, H,W
             func=ToTensor()
             image=func(image)# C H W
             self.imgs.append(image)
@@ -121,77 +117,84 @@ class CustomDatasetUnet2D(Dataset):
         )
     
     def __len__(self):
-        return max(self.iteration,len(self.imgfiles))
+        return min(self.iteration,len(self.pairs))
  
     def __getitem__(self, idx):
         if idx> self.length-1:
             idx=np.random.randint(0,self.length-1)
         # print(oidx,idx)
-
+        #idx=np.random.randint(0,self.length-1)
         image = self.imgs[idx]
         ins,y_one_hot = self.labs[idx]
-      
-        return image, ins,y_one_hot 
-    def _preprocess_mask(self,label,enhance_border=False,use_dist=False):
-        """process mask to  ytrue for train,
-        1. trans to support dtype
-        2. return one hot
-        3. to tensor
         
-        if enhance_border enabled, will generate weighted ytrue that spine-joint-border will both mask 
-            as background and target class(spine) region .so network' out put will be sigmod
-        if use casual unet, the multi-lable-same-class will mask as same class id only
-
-        Args:
-            mask (ndarray): class label,support spine have multi label/ same label, but will all trans to same label
-            enhance_border (bool, optional): whether execute border weight. Defaults to False.
-
-        Returns:
-            ndarray: if commom unet,will generate mask which element 0,1,2...
-                    if border enabled , will generate
+        lab_ins,_ = ins.unique().sort()
+        lab_inds=torch.arange(0,len(lab_ins))  
+        for labi,ind_i in zip(lab_ins,lab_inds):
+            ins[ins==labi]=ind_i
+            
+        #print(y_one_hot.max())
+        # if  torch.rand(1) > 0.5:
+        #     # image=torch.rot90(image,1,[1,2])
+        #     # ins=torch.rot90(ins,1,[0,1])
+        #     # y_one_hot=torch.rot90(y_one_hot,1,[0,1])
+        #     angle=np.random.randint(0,360)
+        #     image=rotate(image,angle)
+        #     ins=rotate(ins,angle)
+        #     y_one_hot=rotate(y_one_hot,angle)
+        return image, ins,y_one_hot 
+    def _preprocess_mask(self,label,process_method="mask"):
+        """process mask to  ytrue for train,
+        process_method : 
+            seg     : label include bg 0,den 1,spine >1 ,   get ins(ignore den 1) and one hot (bg 0+den 1+spine 2), for instance seg
+            den     : label only include den==1 ,           get ins and one hot as den==1  ,for semantic seg (bg+den)
+            spine   : label only include spine==2 ,         get ins and one hot as den==1  ,for sematic seg (bg+den)
+            dis     : label include bg 0,den 1,spine >1 ,   get ins(ignore den 1) and one hot (bg 0+den 1+spine 2), for instance seg
+            ins     : label include bg 0,den 1,spine >1 ,   get ins(ignore den 1) and one hot (bg 0+den 1+spine 2), for instance seg
         """ 
         func=ToTensor()
-        isinstan=label[0].copy()
-        isinstan[isinstan<2]=0
-        isinstan=func(isinstan)
+        ins=label.copy()
+        ins[ins<2]=0
+        
         classnum=self.classnum
         
-        feature=np.squeeze(label[1:])
-        if enhance_border:
-            border=feature==classnum
-            mask=feature
-        elif use_dist:
-            mask=feature[0]
-        else:
-            mask=feature
-        # mask is semantic 
-        mask[mask>classnum-1]=classnum-1
-
-        mask1=func(mask) # C H W
-        # to one-hot
-        y_one_hot = make_one_hot(mask1,self.classnum) # C H W  
-        
-        if enhance_border:
-            w0=5
-            for lab in range(classnum):# edt trans
-                mask2=mask==lab
-                edt=distance_transform_edt(mask2)*0.5
-                y_one_hot[lab,...][mask2]+=torch.from_numpy(w0*np.exp(-edt))[mask2]
-            y_one_hot[0,...][border]=1+w0  #background and forground all set postive and weight set 2
-            # y_one_hot[classnum-1,...][border]=1.5  
-            # y_one_hot[classnum-1,...][border_thin]=1.5  
-        elif use_dist:
-            diss=feature[1]
-            diss=func(diss)
-            out=torch.concat([y_one_hot,diss],dim=0)
-            #print(y_one_hot.shape,out.shape)
-            return isinstan,out
-        # im=axs[1].imshow(y_one_hot[0,...])
-        # cbar=fig.colorbar(im, ax = axs[1])
-        # im=axs[2].imshow(y_one_hot[classnum-1,...])
-        # cbar=fig.colorbar(im, ax = axs[2])
-        # plt.show()
-        return isinstan,y_one_hot
+        if "seg" in process_method :
+            mask=label.copy()
+            mask[mask>classnum-1]=classnum-1
+            
+            # to one-hot
+           
+            ins=func(ins)
+            mask=func(mask) # C H W
+            y_one_hot = make_one_hot(mask,self.classnum) # C H W  
+            joint=get_joint_border2(label,beginlabel=2)
+            y_one_hot[0][joint]=2
+            y_one_hot[2][joint]=2
+        if "ins" in process_method:
+            mask=label.copy()
+            mask[mask>classnum-1]=classnum-1
+            joint=get_border2(label,beginlabel=2)
+            # to one-hot
+           
+            ins=func(ins)
+            mask=func(mask) # C H W
+            y_one_hot = make_one_hot(mask,self.classnum) # C H W  
+            y_one_hot[0][joint]=1
+            y_one_hot[2][joint]=0.2
+        if "spine" in process_method:
+            # mask=label.copy()
+            # mask[mask==1]=0
+            # mask[mask>classnum-1]=classnum-1
+            mask=ins>0
+            # to one-hot
+   
+            ins=func(ins)
+            mask=func(mask) # C H W
+            return ins,mask
+            #y_one_hot = make_one_hot(mask,self.classnum)
+    
+            
+            
+        return ins,y_one_hot
 
 
 
@@ -206,8 +209,8 @@ class OrigionDatasetUnet2D(Dataset):
             transform (function, optional):   enhance. Defaults to None.
             mode (string, optional): train,valid ,test. Defaults to train.
         """
-        self.imgfiles = glob(datafolder+'\\img\\*.tif')
-        self.labelfiles = glob(datafolder+'\\label\\*.tif')
+        self.imgfiles = glob(datafolder+'/img/*.tif')
+        self.labelfiles = glob(datafolder+'/label/*.tif')
         self.pairs=file_base.pair_files(self.imgfiles,self.labelfiles,suffix=suffix)
         self.length             = len(self.imgfiles)
         assert self.length>0, "data could not be empty, chlease check your dataset folder :"+datafolder
@@ -222,7 +225,7 @@ class OrigionDatasetUnet2D(Dataset):
     def load_cache(self):
         self.imgs=[]
         self.labs=[]
-        for img_path,lab_path in zip(self.imgfiles,self.labelfiles):
+        for img_path,lab_path in self.pairs:
             image = imread(img_path)
             label = imread(lab_path)
             label=np.array(label,dtype="int64")
@@ -293,6 +296,7 @@ class ClassDataset(Dataset):
     def __getitem__(self, idx):
         if idx> self.length-1:
             idx=np.random.randint(0,self.length-1)
+        idx=np.random.randint(0,self.length-1)
         # print(oidx,idx)
 
         image = self.X[idx]
@@ -325,7 +329,7 @@ class SliceLoader:
         nz=self.input_sizez
     
     def initial_filelist(self):
-        imfiles=file_base.file_list(self.data_path)
+        imfiles=file_base.file_list(self.img_path)
         lafiles=file_base.file_list(self.label_path)
         self.filepairs=file_base.pair_files(imfiles,lafiles,self.save_suffix)
         self.filenum=len(self.filepairs)
@@ -364,10 +368,10 @@ class SliceLoader:
     @timing    
     def get_dataset(self):
         #使用并行化预处理num_parallel_calls 和预存数据prefetch来提升性能
-        Train_path=self.Train_path
-        trpath=os.path.join(Train_path,"train") 
-        tepath=os.path.join(Train_path,"test") 
-        vapath=os.path.join(Train_path,"valid") 
+        ori_path=self.ori_path
+        trpath=os.path.join(ori_path,"train") 
+        tepath=os.path.join(ori_path,"test") 
+        vapath=os.path.join(ori_path,"valid") 
         batch_size=self.batch_size
         note=self.label_suffix
         filetype=self.filetype
@@ -380,7 +384,7 @@ class SliceLoader:
 
         return ds_train,ds_valid,ds_test
     def split_data(self):
-        Train_path=self.Train_path
+        ori_path=self.ori_path
         split_partion=self.partion # train,valid,test+=1
         accu_partion=[split_partion[0],split_partion[0]+split_partion[1],1]
         path_ts=["train","valid","test"]
@@ -391,8 +395,9 @@ class SliceLoader:
         for path_type,p in zip(path_ts,accu_partion):
             files=self.filepairs[t:int(p*length)]
             t=int(p*length)
-            imgdir=os.path.join(Train_path,path_type+"/img")
-            labdir=os.path.join(Train_path,path_type+"/label")
+            imgdir=os.path.join(self.crop_path,path_type+"/img")
+            labdir=os.path.join(self.crop_path,path_type+"/label")
+            print("===== split dataset ======",path_type,":",len(files))
             file_base.remove_dir(imgdir)
             file_base.create_dir(imgdir)
             file_base.remove_dir(labdir)
@@ -402,21 +407,22 @@ class SliceLoader:
                 shutil.copyfile(imfile, os.path.join(imgdir,name+suffix))
                 _,name,suffix=file_base.split_filename(labfile)
                 shutil.copyfile(labfile, os.path.join(labdir,name+suffix))
-            print("complete folder : ", os.path.join(Train_path,path_type))
+            print("complete folder : ", os.path.join(ori_path,path_type))
             
-    def crop_and_split_data(self,itern=10,split_partion=[]):
-        Train_path=self.Train_path
+    def crop_and_split_data(self,itern=10,split_partion=[],zoom=1,norm=False):
+        ori_path=self.ori_path
         if not split_partion:
             split_partion=self.partion # train,valid,test+=1
         accu_partion=[split_partion[0],split_partion[0]+split_partion[1],1]
         path_ts=["train","valid","test"]
-        imdir=os.path.abspath(self.oridata_path)
+        imdir=os.path.abspath(self.oriimg_path)
         ladir=os.path.abspath(self.orilabel_path)
         imfiles=file_base.file_list(imdir)
         lafiles=file_base.file_list(ladir)
         pairs=file_base.pair_files(imfiles,lafiles,self.label_suffix)
         length=len(pairs)
-        t=0
+        print("===== split dataset ====== total files : ",length)
+        
         w=self.input_sizexy
         nz=self.input_sizez
         if nz>1:
@@ -426,32 +432,56 @@ class SliceLoader:
         lists=np.random.choice(length,length,False)
         files_splits=[]
         infos=[]
+        t=0
+        cnts={type:0 for  type in path_ts}
         for path_type,p in zip(path_ts,accu_partion):
             inds=lists[t:int(p*length)]
             inds=list(range(t,int(p*length)))
             files=[pairs[i] for i in inds]
             t=int(p*length)
-            imgodir=os.path.join(Train_path,path_type+"/img")
-            labodir=os.path.join(Train_path,path_type+"/label")
+            print("===== split dataset ======",path_type,":",len(files))
+            imgodir=os.path.join(self.crop_path,path_type+"/img")
+            labodir=os.path.join(self.crop_path,path_type+"/label")
             file_base.remove_dir(imgodir)
             file_base.create_dir(imgodir)
             file_base.remove_dir(labodir)
             file_base.create_dir(labodir)
-            cnt=enhancer.generate_crop_img_save_list(
-                files,imgodir,labodir,outsize,
-                depth=nz,
-                iter=itern,savetype=self.save_suffix,
-            )
-            if files:
-                files_splits.append(files)
-            else:
-                files.append([])
-            infos.append({"complete folder : ": os.path.join(Train_path,path_type),"img num":len(files),"crop num":cnt})
-            print("complete folder : ", os.path.join(Train_path,path_type),"img num",len(files),"crop num",cnt)
-        for info,fs in zip(infos,files_splits):
-            print(info)
-            for f1,f2 in fs:
-                print(f1,f2)
+        def func(zo):
+            t=0
+            print("========zoom========",zo)
+            for path_type,p in zip(path_ts,accu_partion):
+                inds=lists[t:int(p*length)]
+                inds=list(range(t,int(p*length)))
+                files=[pairs[i] for i in inds]
+                t=int(p*length)
+                print("===== split dataset ======",path_type,":",len(files))
+                imgodir=os.path.join(self.crop_path,path_type+"/img")
+                labodir=os.path.join(self.crop_path,path_type+"/label")
+                
+                cnt=cnts[path_type]
+                cnt=enhancer.generate_crop_img_save_list(
+                    files,imgodir,labodir,outsize,
+                    depth=nz,
+                    iter=itern,savetype=self.save_suffix,zoom=zo,norm=norm,startn=cnt
+                )
+                if files:
+                    files_splits.append(files)
+                else:
+                    files.append([])
+                cnts[path_type]=cnt
+                infos.append({"complete folder : ": os.path.join(ori_path,path_type),"img num":len(files),"crop num":cnt})
+                print("complete folder : ", os.path.join(ori_path,path_type),"img num",len(files),"crop num",cnt)
+        if isinstance(zoom,list):
+
+            for zo in zoom:
+                func(zo)
+        else:
+            func(zoom)
+        
+        # for info,fs in zip(infos,files_splits):
+        #     print(info)
+        #     for f1,f2 in fs:
+        #         print(f1,f2)
            
     
     
@@ -484,20 +514,20 @@ def transtonD(img,tarndim):
 
 
 
-def get_train_tranform():
-    train_transform = Compose([
-        RandomRotate90(),
-        VerticalFlip(),
-        HorizontalFlip(),
-        OneOf([
-            transforms.HueSaturationValue(),
-            transforms.RandomBrightness(),
-            RandomBrightnessContrast(),#RandomContrast has been deprecated. Please use RandomBrightnessContrast
-        ], p=1),
-        # transforms.Resize(config['input_h'], config['input_w']),
-        transforms.Normalize(),
-    ])
-    return train_transform
+# def get_train_tranform():
+#     train_transform = Compose([
+#         RandomRotate90(),
+#         VerticalFlip(),
+#         HorizontalFlip(),
+#         OneOf([
+#             transforms.HueSaturationValue(),
+#             transforms.RandomBrightness(),
+#             RandomBrightnessContrast(),#RandomContrast has been deprecated. Please use RandomBrightnessContrast
+#         ], p=1),
+#         # transforms.Resize(config['input_h'], config['input_w']),
+#         transforms.Normalize(),
+#     ])
+#     return train_transform
 
     
 def augtransform(aug=True,configuration: YAMLConfig=None):
@@ -589,21 +619,7 @@ def load_img(filename=""):
 
 if __name__=="__main__":
   
-    datast=CustomDatasetUnet2D(r"D:\data\Train\Train\2D-2023-border\test","border",3,enhance_border=True)
-    print(f"Train size: {len(datast)}")
-    dataload=DataLoader(datast,4,shuffle=False,
-                            pin_memory=True)
-    for patch in dataload:
-        img,ytrue=patch
-        fig,axs=plt.subplots(2,1,sharex=1,sharey=1)
-      
-        axs[0].imshow(img[0,0,...])
-        a=ytrue[0,-1,...]
-        # print(a[a>1])
-        axs[1].imshow(ytrue[0,-1,...])
-        plt.show()  
-        
-        print(len(patch))
+    pass
         # break
     # for i in range(5):
         

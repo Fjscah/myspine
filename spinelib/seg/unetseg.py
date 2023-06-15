@@ -3,7 +3,7 @@ import numpy as np
 
 from tqdm import tqdm
 
-from . import segment
+from . import segment,seg_base
 from skimage.morphology import remove_small_objects
 from skimage.segmentation import watershed
 from skimage import filters
@@ -113,16 +113,16 @@ def instance_unetmask_bypeak(spinepr,mask,searchbox,min_radius,spinesize_range=[
     spine_label=remove_small_objects(spine_label,min_size=minspinesize)
     return spine_label
 
-def instance_unetmask_by_border(spinepr,mask,bgpr,th,spinesize_range=[4,800]):
+def instance_unetmask_by_border(spinepr,mask,maskseed,spinesize_range=[4,800]):
     #outlayer sigmoid
     minspinesize,maxspinesize=spinesize_range
-    mask2=mask & (bgpr<th)
-    labels,num=segment.ndilable(mask2,2)
+    mask2=mask & maskseed
+    labels,num=seg_base.ndilable(mask2,2)
     labels=remove_small_objects(labels,minspinesize)
     
     spine_label=watershed(-spinepr,labels,mask=mask,connectivity=2)
     labels2=mask>spine_label
-    labels2,num2=segment.ndilable(labels2,num+1)
+    labels2,num2=seg_base.ndilable(labels2,num+1)
     
     
     spine_label=remove_small_objects(spine_label,min_size=minspinesize)
@@ -182,13 +182,13 @@ def instance_unetmask_by_dis(model,img,th=0.8,spinesize_range=[4,800]):
     minspinesize,maxspinesize=spinesize_range
     mask2=(masks==2) & (diss>th)
 
-    labels,num=segment.ndilable(mask2,2)
+    labels,num=seg_base.ndilable(mask2,2)
     
     # labels=remove_small_objects(labels,minspinesize)
     
     spine_label=watershed(-diss,labels,mask=masks==2,connectivity=2)
     labels2=mask>spine_label
-    labels2,num2=segment.ndilable(labels2,num+1)
+    labels2,num2=seg_base.ndilable(labels2,num+1)
     
     
     spine_label=remove_small_objects(spine_label,min_size=minspinesize)

@@ -17,7 +17,6 @@ import logging
 import time
 import sys
 import os
-sys.path.append(os.path.abspath("./utils"))
 from . import file_base
 from .yaml_config import YAMLConfig
 from logging import handlers
@@ -100,7 +99,7 @@ class Logger(object):
         self.log_path=self.configuration.config["Path"]["log_path"]
     def __init__(self,filename,level='info',when='D',backCount=3,fmt='%(asctime)s - %(pathname)s[line:%(lineno)d] - %(levelname)s: %(message)s'):
         # self.setting(configuration)
-        #self.console = sys.stdout
+        self.console = sys.stdout
         self.filename=filename#os.path.join(os.path.abspath(self.log_path),"all.log")
         self.file=None
         print(self.filename)
@@ -132,10 +131,10 @@ class Logger(object):
 
     def flush(self):
         pass
-        #self.console.flush()
-        # if self.file is not None:
-        #     self.file.flush()
-        #     os.fsync(self.file.fileno())
+        self.console.flush()
+        if self.file is not None:
+            self.file.flush()
+            os.fsync(self.file.fileno())
     def close(self):
        # self.console.close()
         if self.file is not None:

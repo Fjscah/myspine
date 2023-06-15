@@ -8,7 +8,6 @@ from sklearn.preprocessing import binarize
 from scipy.ndimage import generate_binary_structure
 from skimage.transform import rotate
 import matplotlib.pyplot as plt
-sys.path.append(r".")
 import numpy as np
 from scipy import ndimage
 from skimage.measure import label, regionprops, regionprops_table

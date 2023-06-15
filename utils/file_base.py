@@ -14,29 +14,29 @@ def split_filename(filename):
     Returns: dirpath,shortname,suffix
         list: 
     for example 
-    f = 'C:\\X\\Data\\foo.txt'
+    f = 'C:/X/Data/foo.txt'
     shortname="foo"
     basename="foo.txt"
     suffix=".txt"
-    dirpath="C:\\X\\Data"
+    dirpath="C:/X/Data"
     
-    f = 'C:\\X\\Data\\foo'
+    f = 'C:/X/Data/foo'
     shortname="foo"
     basename="foo"
     suffix=""
-    dirpath="C:\\X\\Data\\foo"
+    dirpath="C:/X/Data/foo"
     
-    f = 'C:\\X\\Data\\foo\\'
+    f = 'C:/X/Data/foo/'
     shortname="foo"
     basename="foo"
     suffix=""
-    dirpath="C:\\X\\Data\\foo\\"
+    dirpath="C:/X/Data/foo/"
     """
     filename=path_to_platform(filename)
     basename=os.path.basename(filename)
     shortname,suffix=os.path.splitext(basename)
     if "." not in suffix:# is dir
-        if filename[-1]=="\\" or filename[-1]=="/":
+        if filename[-1]=="/" or filename[-1]=="/":
             filename=filename[:-1]
             basename=os.path.basename(filename)
         return filename,basename,suffix
@@ -46,10 +46,10 @@ def split_filename(filename):
 def path_to_platform(filepath):
     """to system filepath format"""
     if sys == "Windows":
-        filepath=filepath.replace('/','\\')
+        filepath=filepath.replace('/','/')
         # print("OS is Windows!!!")
     elif sys == "Linux":
-        filepath=filepath.replace('\\','/')
+        filepath=filepath.replace('/','/')
         # print("OS is Linux!!!")
     return filepath
 
@@ -66,13 +66,13 @@ def get_parent_dir(path_current="",level=1):
     if not path_current:
         path_current=os.path.abspath(r".")
     # print('path_current=',path_current)
-    path_current_split=path_current.split('\\')
+    path_current_split=path_current.split('/')
     # print('path_current_split=',path_current_split)
     path_want=path_current_split[0]
    
     for i in range(len(path_current_split)-1-path_count):
         j=i+1
-        path_want=path_want+'\\\\'+path_current_split[j]
+        path_want=path_want+'//'+path_current_split[j]
 
     return path_want
 

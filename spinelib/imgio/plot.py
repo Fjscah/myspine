@@ -6,7 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import napari
 from . import utils
-
+import colorcet as cc
+from matplotlib.widgets import MultiCursor
+from matplotlib.colors import LinearSegmentedColormap
 __all__ = [
     # matplotlib: 2d plot
     "imshow", "scatter", "imoverlay",
@@ -238,7 +240,21 @@ def imoverlay(im_dict, shape=None,
         fig.savefig(save, dpi=dpi)
 
     return fig, axes
-
+def showims(*ims):
+    fig,axes=plt.subplots(1,len(ims),sharex=True,sharey=True)
+    # print(im1.shape)
+    for i,im in enumerate(ims):
+        #print(im.shape)
+        np.dtype
+        if  "int" in im.dtype.__repr__() and len(np.unique(im))<500:
+            cmap=LinearSegmentedColormap.from_list("isolum",cc.glasbey)
+            axes[i].imshow(im,interpolation='none',cmap=cmap)
+        else:
+            axes[i].imshow(im,interpolation='none')
+    # axes[1].imshow(im2,interpolation='none')
+    # axes[2].imshow(im3,interpolation='none')
+    multi = MultiCursor(fig.canvas, axes, color='r', lw=1, horizOn=True, vertOn=True)
+    plt.show()
 #=========================
 # napari
 #=========================

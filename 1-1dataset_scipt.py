@@ -1,6 +1,5 @@
 #%%
 import sys
-sys.path.append(".")
 from utils.yaml_config import YAMLConfig
 from utils.basic_wrap import Logger,logit
 from skimage.segmentation import relabel_sequential
@@ -13,7 +12,7 @@ import numpy as np
 #-----------------------#
 # ===== Parameter ======#
 #-----------------------# 
-configfile=r"config\defalut_2d_dis.yaml"
+configfile=r"config\defalut_2d_ins_ERF.yaml"
 
 get_seg_tif_flag=False
 split_tif_flag  =True
@@ -46,7 +45,7 @@ if get_seg_tif_flag:
     print("===== make spine tif ======")
     imgList = os.listdir(imgdir)
     segdir=dict_a["orilabel_path"]   
-    imdir=dict_a["oridata_path"]   
+    imdir=dict_a["oriimg_path"]   
     for imgname in imgList:
         b,suffix=os.path.splitext(imgname)
         imgtif=os.path.join(imgdir,imgname)
@@ -78,10 +77,10 @@ if get_seg_tif_flag:
 itern=50
 # split dataset 
 if split_tif_flag:
-    print("===== split dataset ======")
+    
     dataloader=SliceLoader(default_configuration)
     # tf.executing_eagerly()
     #trds,_,_=dataloader.get_dataset()
     #SliceLoader.show_data(trds)
-    dataloader.crop_and_split_data(itern)  
+    dataloader.crop_and_split_data(itern,norm=True,zoom=[1,2])  # first split then crop
 # %%

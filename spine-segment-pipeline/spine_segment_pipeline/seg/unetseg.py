@@ -7,7 +7,7 @@ from . import segment
 from skimage.morphology import remove_small_objects
 from skimage.segmentation import watershed
 from torchvision.transforms import ToTensor
-
+from . import seg_base
 def predict_2d_img(model,img):
     image=img.astype("float32")
     im=ToTensor()(image)#C H W
@@ -99,18 +99,17 @@ def instance_unetmask_bypeak(spinepr,mask,searchbox,min_radius,spinesize_range=[
     spine_label=remove_small_objects(spine_label,min_size=minspinesize)
     return spine_label
 
-def instance_unetmask_by_border(spinepr,mask,bgpr,th,spinesize_range=[4,800]):
+def instance_unetmask_by_border(spinepr,mask,maskseed,spinesize_range=[4,800]):
     #outlayer sigmoid
     minspinesize,maxspinesize=spinesize_range
-    mask2=mask & (bgpr<th)
-    labels,num=segment.ndilable(mask2,2)
+    mask2=mask & maskseed
+    labels,num=seg_base.ndilable(mask2,2)
     labels=remove_small_objects(labels,minspinesize)
     
     spine_label=watershed(-spinepr,labels,mask=mask,connectivity=2)
     labels2=mask>spine_label
-    labels2,num2=segment.ndilable(labels2,num+1)
+    labels2,num2=seg_base.ndilable(labels2,num+1)
     
     
     spine_label=remove_small_objects(spine_label,min_size=minspinesize)
     return spine_label+labels2
-    
